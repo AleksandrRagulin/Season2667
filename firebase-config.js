@@ -27,11 +27,11 @@
 // (localStorage), без общей синхронизации между участниками.
 
 window.FIREBASE_CONFIG = {
-  apiKey: "ВСТАВЬТЕ_apiKey",
-  authDomain: "ВАШ_ПРОЕКТ.firebaseapp.com",
-  databaseURL: "https://ВАШ_ПРОЕКТ-default-rtdb.firebaseio.com",
-  projectId: "ВАШ_ПРОЕКТ",
-  storageBucket: "ВАШ_ПРОЕКТ.appspot.com",
-  messagingSenderId: "ВСТАВЬТЕ_messagingSenderId",
-  appId: "ВСТАВЬТЕ_appId"
+  apiKey: "AIzaSyDco3qE6RGEAv465-W1DXrPe8bk9R63aME",
+  authDomain: "footanal2667.firebaseapp.com",
+  databaseURL: "https://footanal2667-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "footanal2667",
+  storageBucket: "footanal2667.firebasestorage.app",
+  messagingSenderId: "133942305859",
+  appId: "1:133942305859:web:b3b6f694bb0ef01260a0f6"
 };
