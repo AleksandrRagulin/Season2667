@@ -175,6 +175,28 @@
     letter-spacing:.02em;
   }
   .lb-note{ color:var(--ink-muted); font-size:.82rem; }
+  .sync-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:.74rem;
+    font-weight:600;
+    padding:4px 10px 4px 8px;
+    border-radius:999px;
+  }
+  .sync-pill::before{
+    content:"";
+    width:7px; height:7px;
+    border-radius:50%;
+    background:currentColor;
+  }
+  .sync-pill.sync-on{ background:var(--good-soft); color:var(--good); }
+  .sync-pill.sync-off{ background:var(--gold-soft); color:var(--gold); }
+  .sync-pill.sync-local{ background:var(--surface-3); color:var(--ink-muted); }
+  @media (prefers-reduced-motion:no-preference){
+    .sync-pill.sync-off::before{ animation:sync-pulse 1.1s ease-in-out infinite; }
+  }
+  @keyframes sync-pulse{ 50%{ opacity:.35; } }
   .lb-grid{
     display:grid;
     grid-template-columns:repeat(4, minmax(0,1fr));

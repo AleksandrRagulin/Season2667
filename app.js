@@ -134,7 +134,7 @@
     grid.innerHTML = html;
   }
 
-  // ---------- persistence (localStorage) ----------
+  // ---------- persistence (localStorage + optional Firebase sync) ----------
 
   function collectMatch(card, stage){
     var data = {
@@ -171,18 +171,103 @@
     return state;
   }
 
-  function saveState(){
-    try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(collectState()));
-    }catch(e){ /* storage unavailable (e.g. private mode) — silently skip */ }
-  }
-
   function loadState(){
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : null;
     }catch(e){
       return null;
+    }
+  }
+
+  // ---- Firebase Realtime Database (optional shared sync) ----
+  // Filled in via firebase-config.js. Without it, the app keeps working
+  // on localStorage alone (single browser, no cross-device sync).
+  var fbRef = null;
+  var fbReady = false;
+  var lastPushedJSON = null;
+  var pushTimer = null;
+  var pendingRemoteState = null;
+
+  function isFirebaseConfigured(){
+    var c = window.FIREBASE_CONFIG;
+    return !!(c && c.apiKey && c.databaseURL && c.apiKey.indexOf("ВСТАВЬТЕ") === -1);
+  }
+
+  function setSyncStatus(text, mode){
+    var el = document.getElementById("sync-status");
+    if(!el) return;
+    el.textContent = text;
+    el.classList.remove("sync-on","sync-off","sync-local");
+    el.classList.add(mode);
+  }
+
+  function isEditingInGrid(){
+    var el = document.activeElement;
+    return !!(el && el.closest && el.closest(".card-grid"));
+  }
+
+  function applyRemoteState(state){
+    // Don't yank a field out from under someone mid-edit — queue it
+    // and apply as soon as they leave the grid.
+    if(isEditingInGrid()){
+      pendingRemoteState = state;
+      return;
+    }
+    applyState(state);
+    recompute();
+  }
+
+  document.addEventListener("focusout", function(e){
+    if(!pendingRemoteState) return;
+    if(!(e.target && e.target.closest && e.target.closest(".card-grid"))) return;
+    var state = pendingRemoteState;
+    pendingRemoteState = null;
+    setTimeout(function(){
+      if(!isEditingInGrid()){ applyState(state); recompute(); }
+    }, 50);
+  });
+
+  function initFirebaseSync(){
+    if(!isFirebaseConfigured() || typeof firebase === "undefined") return false;
+    try{
+      firebase.initializeApp(window.FIREBASE_CONFIG);
+      fbRef = firebase.database().ref("predictions");
+      fbReady = true;
+
+      fbRef.on("value", function(snap){
+        var data = snap.val();
+        if(!data) return; // nothing shared yet — keep local/default state
+        var json = JSON.stringify(data);
+        if(json === lastPushedJSON) return; // our own write echoing back
+        applyRemoteState(data);
+      });
+
+      firebase.database().ref(".info/connected").on("value", function(snap){
+        setSyncStatus(snap.val() === true ? "Синхронизировано" : "Подключение…", snap.val() === true ? "sync-on" : "sync-off");
+      });
+
+      return true;
+    }catch(err){
+      console.warn("Firebase sync недоступен, работаем локально:", err);
+      setSyncStatus("Только в этом браузере", "sync-local");
+      return false;
+    }
+  }
+
+  function saveState(){
+    var state = collectState();
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }catch(e){ /* storage unavailable (e.g. private mode) — silently skip */ }
+
+    if(fbReady && fbRef){
+      clearTimeout(pushTimer);
+      pushTimer = setTimeout(function(){
+        var json = JSON.stringify(state);
+        lastPushedJSON = json;
+        fbRef.set(state).catch(function(err){ console.warn("Не удалось отправить данные в Firebase:", err); });
+      }, 400);
     }
   }
 
@@ -290,4 +375,10 @@
 
   applyState(loadState());
   recompute();
+
+  if(initFirebaseSync()){
+    setSyncStatus("Подключение…", "sync-off");
+  } else {
+    setSyncStatus("Только в этом браузере", "sync-local");
+  }
 })();

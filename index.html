@@ -27,7 +27,7 @@
   <section class="leaderboard" aria-live="polite">
     <div class="lb-head">
       <span class="lb-title">Общий зачёт</span>
-      <span class="lb-note">обновляется сразу после ввода счёта</span>
+      <span class="sync-pill sync-local" id="sync-status">Только в этом браузере</span>
     </div>
     <div class="lb-grid" id="lb-grid">
       <div class="lb-card"><span class="lb-rank">—</span><div class="lb-name">Загрузка…</div><div class="lb-total">0</div></div>
@@ -218,7 +218,7 @@
     </div>
   </div>
 
-  <footer class="note">Счёт и прогнозы сохраняются в этом браузере (localStorage) — на другом устройстве потребуется ввести их заново.</footer>
+  <footer class="note">Статус синхронизации — в шапке общего зачёта. Без настройки Firebase прогнозы видны только в этом браузере.</footer>
 </div>
 
 <template id="tpl-league">
@@ -364,6 +364,9 @@
         </div>
       </article></template>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script src="app.js" defer></script>
 </body>
 </html>
