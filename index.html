@@ -15,6 +15,10 @@
     <div class="eyebrow">Конкурс прогнозов</div>
     <h1>Табло прогнозов</h1>
     <p class="top-sub">Четыре участника, один турнир. Впишите счёт — баллы посчитаются сами.</p>
+    <div class="session-bar" id="session-bar" hidden>
+      <span class="session-who">Вы вошли как <b id="session-name"></b></span>
+      <button type="button" class="session-logout" id="logout-btn">Выйти</button>
+    </div>
     <div class="tabs" role="tablist" aria-label="Категория матчей">
       <button type="button" class="tab-btn is-active" data-tab="league" role="tab" aria-selected="true">Лиги</button>
       <button type="button" class="tab-btn" data-tab="europe" role="tab" aria-selected="false">Еврокубки</button>
@@ -22,7 +26,25 @@
   </div>
 </div>
 
-<div class="wrap">
+<div class="auth-screen" id="auth-screen" hidden>
+  <form class="auth-card" id="auth-form">
+    <div class="eyebrow">Личный кабинет</div>
+    <h2 class="auth-title">Кто вы?</h2>
+    <p class="auth-hint">Выберите себя и введите пароль. Заходите первый раз — просто придумайте пароль, он закрепится за вами.</p>
+    <div class="player-pick" id="player-pick" role="group" aria-label="Выбор участника">
+      <button type="button" class="player-pick-btn player-tag--egor" data-player="egor">Егор Б.</button>
+      <button type="button" class="player-pick-btn player-tag--ivan" data-player="ivan">Иван Г.</button>
+      <button type="button" class="player-pick-btn player-tag--sasha_r" data-player="sasha_r">Александр Р.</button>
+      <button type="button" class="player-pick-btn player-tag--sasha_t" data-player="sasha_t">Александр Т.</button>
+    </div>
+    <label class="auth-label" for="auth-password">Пароль</label>
+    <input class="auth-password" id="auth-password" type="password" autocomplete="current-password" required>
+    <button type="submit" class="auth-submit" id="auth-submit" disabled>Продолжить</button>
+    <p class="auth-error" id="auth-error" role="alert"></p>
+  </form>
+</div>
+
+<div class="wrap" id="app-wrap" hidden>
 
   <section class="leaderboard" aria-live="polite">
     <div class="lb-head">
@@ -47,7 +69,7 @@
 
     <div class="card-grid" data-stage-grid="league">
       
-      <article class="match-card" data-stage="league">
+      <article class="match-card" data-stage="league" data-match-id="seed-league-1">
         <header class="match-head">
           <span class="match-eyebrow">Лиги</span>
           <span class="match-head-actions">
@@ -103,7 +125,7 @@
             </div>
         </div>
       </article>
-      
+
       <button type="button" class="add-tile" data-add-stage="league">
         <span class="add-tile-icon">+</span>
         <span>Добавить матч</span>
@@ -126,7 +148,7 @@
 
     <div class="card-grid" data-stage-grid="europe">
       
-      <article class="match-card" data-stage="europe">
+      <article class="match-card" data-stage="europe" data-match-id="seed-europe-1">
         <header class="match-head">
           <span class="match-eyebrow">Еврокубки</span>
           <span class="match-head-actions">
@@ -210,7 +232,7 @@
             </div>
         </div>
       </article>
-      
+
       <button type="button" class="add-tile" data-add-stage="europe">
         <span class="add-tile-icon">+</span>
         <span>Добавить матч</span>
@@ -365,6 +387,7 @@
       </article></template>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="app.js" defer></script>

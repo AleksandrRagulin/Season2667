@@ -152,6 +152,138 @@
     outline-offset:2px;
   }
 
+  /* ---------- session bar ---------- */
+  .session-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-top:16px;
+    padding:8px 14px;
+    border-radius:10px;
+    background:rgba(255,255,255,.1);
+    font-size:.82rem;
+  }
+  .session-who b{ font-weight:700; }
+  .session-logout{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:.78rem;
+    padding:5px 12px;
+    border-radius:999px;
+    border:1px solid rgba(243,251,244,.35);
+    background:transparent;
+    color:var(--accent-ink);
+    cursor:pointer;
+  }
+  .session-logout:hover{ background:rgba(255,255,255,.12); }
+
+  /* ---------- auth screen ---------- */
+  .auth-screen{
+    max-width:420px;
+    margin:0 auto 28px;
+    padding:0 20px;
+  }
+  .auth-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:24px 24px 22px;
+    box-shadow:var(--shadow);
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .auth-title{
+    font-family:var(--font-display);
+    font-weight:400;
+    font-size:1.8rem;
+    letter-spacing:.02em;
+    margin:0;
+  }
+  .auth-hint{
+    color:var(--ink-muted);
+    font-size:.85rem;
+    margin:0 0 6px;
+  }
+  .player-pick{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:8px;
+    margin-bottom:6px;
+  }
+  .player-pick-btn{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:.85rem;
+    padding:10px 9px 10px 20px;
+    position:relative;
+    border-radius:10px;
+    border:1.5px solid var(--line);
+    background:var(--surface-2);
+    color:var(--ink);
+    cursor:pointer;
+    text-align:left;
+  }
+  .player-pick-btn::before{
+    content:"";
+    position:absolute;
+    left:9px; top:50%;
+    transform:translateY(-50%);
+    width:7px; height:7px;
+    border-radius:50%;
+    background:var(--dot);
+  }
+  .player-pick-btn.player-tag--egor{ --dot:var(--p-egor); }
+  .player-pick-btn.player-tag--ivan{ --dot:var(--p-ivan); }
+  .player-pick-btn.player-tag--sasha_r{ --dot:var(--p-sasha_r); }
+  .player-pick-btn.player-tag--sasha_t{ --dot:var(--p-sasha_t); }
+  .player-pick-btn.is-selected{
+    border-color:var(--accent);
+    background:var(--good-soft);
+  }
+  .auth-label{
+    font-size:.78rem;
+    font-weight:600;
+    color:var(--ink-muted);
+  }
+  .auth-password{
+    font-family:var(--font-mono);
+    font-size:1rem;
+    padding:9px 10px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--ink);
+  }
+  .auth-password:focus{ border-color:var(--accent); }
+  .auth-submit{
+    margin-top:6px;
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:.92rem;
+    padding:11px;
+    border-radius:10px;
+    border:none;
+    background:var(--accent);
+    color:var(--accent-ink);
+    cursor:pointer;
+  }
+  .auth-submit:disabled{ opacity:.5; cursor:not-allowed; }
+  .auth-submit:not(:disabled):hover{ background:var(--accent-strong); }
+  .auth-error{
+    min-height:1.2em;
+    margin:0;
+    font-size:.8rem;
+    color:var(--miss);
+  }
+
+  /* ---------- locked prediction fields ---------- */
+  .player-row.is-locked{ opacity:.55; }
+  .player-row.is-locked .pred-home,
+  .player-row.is-locked .pred-away{ cursor:not-allowed; }
+  .add-tile[hidden], .match-remove[hidden]{ display:none; }
+
   /* ---------- leaderboard ---------- */
   .leaderboard{
     background:var(--surface);

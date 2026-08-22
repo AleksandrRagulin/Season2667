@@ -3,7 +3,17 @@
 
   var PLAYERS = ["egor","ivan","sasha_r","sasha_t"];
   var PLAYER_LABEL = {egor:"Егор Б.", ivan:"Иван Г.", sasha_r:"Александр Р.", sasha_t:"Александр Т."};
-  var STORAGE_KEY = "season2627.predictions.v1";
+  var ADMIN_PLAYER = "sasha_r"; // only this player may add/remove matches
+  var EMAIL_DOMAIN = "season2627.invalid"; // reserved non-routable TLD (RFC 2606) — these aren't real inboxes
+  var STORAGE_KEY = "season2627.predictions.v1"; // legacy local-only fallback, used only without Firebase
+
+  function playerEmail(pid){ return pid + "@" + EMAIL_DOMAIN; }
+  function emailToPlayer(email){
+    if(!email) return null;
+    var at = email.indexOf("@");
+    var local = at === -1 ? email : email.slice(0, at);
+    return PLAYERS.indexOf(local) !== -1 ? local : null;
+  }
 
   function num(el){
     if(!el) return null;
@@ -134,9 +144,48 @@
     grid.innerHTML = html;
   }
 
-  // ---------- persistence (localStorage + optional Firebase sync) ----------
+  // ---------- reading/writing one match card's fields ----------
 
-  function collectMatch(card, stage){
+  function populateCardFields(card, stage, data){
+    data = data || {};
+    card.querySelector(".team-home").textContent = data.home || "";
+    card.querySelector(".team-away").textContent = data.away || "";
+    card.querySelector(".actual-home").value = data.aH || "";
+    card.querySelector(".actual-away").value = data.aA || "";
+    if(stage === "europe"){
+      selectToggle(card.querySelector(".time-row .toggle-group"), data.time || null);
+    }
+    PLAYERS.forEach(function(pid){
+      var row = card.querySelector('.player-row[data-player="' + pid + '"]');
+      var pd = (data.players && data.players[pid]) || {};
+      row.querySelector(".pred-home").value = pd.pH || "";
+      row.querySelector(".pred-away").value = pd.pA || "";
+      if(stage === "europe"){
+        selectToggle(row.querySelector('.toggle-group[data-role="pred-time"]'), pd.time || null);
+      }
+    });
+  }
+
+  function buildCard(stage, matchId, data){
+    var tpl = document.getElementById(stage === "league" ? "tpl-league" : "tpl-europe");
+    var card = tpl.content.firstElementChild.cloneNode(true);
+    card.dataset.matchId = matchId;
+    populateCardFields(card, stage, data);
+    return card;
+  }
+
+  function gridFor(stage){
+    return document.querySelector('.card-grid[data-stage-grid="' + stage + '"]');
+  }
+
+  function cardFor(stage, matchId){
+    var grid = gridFor(stage);
+    return grid ? grid.querySelector('.match-card[data-match-id="' + matchId + '"]') : null;
+  }
+
+  // ---------- legacy local-only mode (no Firebase configured) ----------
+
+  function collectMatchLocal(card, stage){
     var data = {
       home: card.querySelector(".team-home").textContent.trim(),
       away: card.querySelector(".team-away").textContent.trim(),
@@ -149,10 +198,7 @@
     }
     card.querySelectorAll(".player-row").forEach(function(row){
       var pid = row.dataset.player;
-      var pd = {
-        pH: row.querySelector(".pred-home").value,
-        pA: row.querySelector(".pred-away").value
-      };
+      var pd = { pH: row.querySelector(".pred-home").value, pA: row.querySelector(".pred-away").value };
       if(stage === "europe"){
         pd.time = selectedValue(row.querySelector('.toggle-group[data-role="pred-time"]'));
       }
@@ -161,33 +207,64 @@
     return data;
   }
 
-  function collectState(){
-    var state = { activeTab: document.querySelector(".tab-btn.is-active").dataset.tab, league: [], europe: [] };
+  function collectStateLocal(){
+    var state = { league: {}, europe: {} };
     ["league","europe"].forEach(function(stage){
-      document.querySelectorAll('.card-grid[data-stage-grid="' + stage + '"] .match-card').forEach(function(card){
-        state[stage].push(collectMatch(card, stage));
+      gridFor(stage).querySelectorAll(".match-card").forEach(function(card){
+        state[stage][card.dataset.matchId] = collectMatchLocal(card, stage);
       });
     });
     return state;
   }
 
-  function loadState(){
+  function saveLocal(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(collectStateLocal())); }catch(e){}
+  }
+
+  function loadLocal(){
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : null;
-    }catch(e){
-      return null;
-    }
+    }catch(e){ return null; }
   }
 
-  // ---- Firebase Realtime Database (optional shared sync) ----
-  // Filled in via firebase-config.js. Without it, the app keeps working
-  // on localStorage alone (single browser, no cross-device sync).
-  var fbRef = null;
-  var fbReady = false;
-  var lastPushedJSON = null;
-  var pushTimer = null;
-  var pendingRemoteState = null;
+  function applyLocalState(state){
+    if(!state) return;
+    ["league","europe"].forEach(function(stage){
+      var grid = gridFor(stage);
+      var tile = grid.querySelector(".add-tile");
+      var ids = Object.keys(state[stage] || {});
+      // update/create known matches, keep the seed card if nothing saved yet for it
+      ids.forEach(function(matchId){
+        var card = cardFor(stage, matchId);
+        if(card){
+          populateCardFields(card, stage, state[stage][matchId]);
+        } else {
+          grid.insertBefore(buildCard(stage, matchId, state[stage][matchId]), tile);
+        }
+      });
+      // remove local cards that no longer exist in saved state (except keep at least the DOM as-is if state is empty)
+      if(ids.length){
+        grid.querySelectorAll(".match-card").forEach(function(card){
+          if(ids.indexOf(card.dataset.matchId) === -1) card.remove();
+        });
+      }
+    });
+  }
+
+  var localMatchCounter = 0;
+  function nextLocalId(stage){
+    localMatchCounter += 1;
+    return "local-" + stage + "-" + Date.now() + "-" + localMatchCounter;
+  }
+
+  // ---------- Firebase (Auth + per-field Realtime Database sync) ----------
+
+  var db = null;
+  var currentPlayer = null;
+  var watchersAttached = false;
+  var pendingByCard = Object.create(null); // matchId -> latest remote data waiting for focus to clear
+  var writeTimers = Object.create(null); // debounce key -> timer id
 
   function isFirebaseConfigured(){
     var c = window.FIREBASE_CONFIG;
@@ -202,127 +279,251 @@
     el.classList.add(mode);
   }
 
-  function isEditingInGrid(){
-    var el = document.activeElement;
-    return !!(el && el.closest && el.closest(".card-grid"));
+  function showAuthScreen(){
+    document.getElementById("auth-screen").hidden = false;
+    document.getElementById("app-wrap").hidden = true;
+    document.getElementById("session-bar").hidden = true;
   }
 
-  function applyRemoteState(state){
-    // Don't yank a field out from under someone mid-edit — queue it
-    // and apply as soon as they leave the grid.
-    if(isEditingInGrid()){
-      pendingRemoteState = state;
+  function showApp(){
+    document.getElementById("auth-screen").hidden = true;
+    document.getElementById("app-wrap").hidden = false;
+    var bar = document.getElementById("session-bar");
+    bar.hidden = false;
+    document.getElementById("session-name").textContent = PLAYER_LABEL[currentPlayer] || currentPlayer;
+  }
+
+  function scheduleWrite(key, fn, delay){
+    clearTimeout(writeTimers[key]);
+    writeTimers[key] = setTimeout(fn, delay || 350);
+  }
+
+  function pushMatchField(stage, matchId, patch){
+    if(!db) return;
+    var key = stage + "/" + matchId + ":match";
+    scheduleWrite(key, function(){
+      db.ref("predictions/" + stage + "/" + matchId).update(patch).catch(function(err){
+        console.warn("Firebase: не удалось сохранить поле матча:", err);
+      });
+    });
+  }
+
+  function pushPlayerField(stage, matchId, pid, patch){
+    if(!db) return;
+    var key = stage + "/" + matchId + "/" + pid;
+    scheduleWrite(key, function(){
+      db.ref("predictions/" + stage + "/" + matchId + "/players/" + pid).update(patch).catch(function(err){
+        console.warn("Firebase: не удалось сохранить прогноз:", err);
+      });
+    });
+  }
+
+  function addMatchRemote(stage){
+    if(!db || currentPlayer !== ADMIN_PLAYER) return;
+    db.ref("predictions/" + stage).push().set({ home:"", away:"", aH:"", aA:"" }).catch(function(err){
+      console.warn("Firebase: не удалось добавить матч:", err);
+      window.alert("Не удалось добавить матч: " + (err && err.message ? err.message : err));
+    });
+  }
+
+  function removeMatchRemote(stage, matchId){
+    if(!db || currentPlayer !== ADMIN_PLAYER) return;
+    db.ref("predictions/" + stage + "/" + matchId).remove().catch(function(err){
+      console.warn("Firebase: не удалось удалить матч:", err);
+      window.alert("Не удалось удалить матч: " + (err && err.message ? err.message : err));
+    });
+  }
+
+  function isEditingWithin(card){
+    var el = document.activeElement;
+    return !!(el && card.contains(el));
+  }
+
+  function applyRemoteToCard(card, stage, data){
+    if(isEditingWithin(card)){
+      pendingByCard[card.dataset.matchId] = data;
       return;
     }
-    applyState(state);
+    populateCardFields(card, stage, data);
+    applyPermissionsToCard(card);
     recompute();
   }
 
   document.addEventListener("focusout", function(e){
-    if(!pendingRemoteState) return;
-    if(!(e.target && e.target.closest && e.target.closest(".card-grid"))) return;
-    var state = pendingRemoteState;
-    pendingRemoteState = null;
+    var card = e.target && e.target.closest && e.target.closest(".match-card");
+    if(!card) return;
+    var matchId = card.dataset.matchId;
+    if(!(matchId in pendingByCard)) return;
+    var data = pendingByCard[matchId];
+    delete pendingByCard[matchId];
     setTimeout(function(){
-      if(!isEditingInGrid()){ applyState(state); recompute(); }
+      if(!isEditingWithin(card)){
+        populateCardFields(card, card.dataset.stage, data);
+        applyPermissionsToCard(card);
+        recompute();
+      }
     }, 50);
   });
 
-  function initFirebaseSync(){
-    if(!isFirebaseConfigured() || typeof firebase === "undefined") return false;
-    try{
-      firebase.initializeApp(window.FIREBASE_CONFIG);
-      fbRef = firebase.database().ref("predictions");
-      fbReady = true;
+  function watchStage(stage){
+    var ref = db.ref("predictions/" + stage);
+    var grid = gridFor(stage);
+    var tile = grid.querySelector(".add-tile");
 
-      fbRef.on("value", function(snap){
-        var data = snap.val();
-        if(!data) return; // nothing shared yet — keep local/default state
-        var json = JSON.stringify(data);
-        if(json === lastPushedJSON) return; // our own write echoing back
-        applyRemoteState(data);
-      });
-
-      firebase.database().ref(".info/connected").on("value", function(snap){
-        setSyncStatus(snap.val() === true ? "Синхронизировано" : "Подключение…", snap.val() === true ? "sync-on" : "sync-off");
-      });
-
-      return true;
-    }catch(err){
-      console.warn("Firebase sync недоступен, работаем локально:", err);
-      setSyncStatus("Только в этом браузере", "sync-local");
-      return false;
-    }
-  }
-
-  function saveState(){
-    var state = collectState();
-    try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }catch(e){ /* storage unavailable (e.g. private mode) — silently skip */ }
-
-    if(fbReady && fbRef){
-      clearTimeout(pushTimer);
-      pushTimer = setTimeout(function(){
-        var json = JSON.stringify(state);
-        lastPushedJSON = json;
-        fbRef.set(state).catch(function(err){ console.warn("Не удалось отправить данные в Firebase:", err); });
-      }, 400);
-    }
-  }
-
-  function buildCardFromData(stage, data){
-    var tpl = document.getElementById(stage === "league" ? "tpl-league" : "tpl-europe");
-    var card = tpl.content.firstElementChild.cloneNode(true);
-    card.querySelector(".team-home").textContent = data.home || "";
-    card.querySelector(".team-away").textContent = data.away || "";
-    card.querySelector(".actual-home").value = data.aH || "";
-    card.querySelector(".actual-away").value = data.aA || "";
-    if(stage === "europe" && data.time){
-      selectToggle(card.querySelector(".time-row .toggle-group"), data.time);
-    }
-    PLAYERS.forEach(function(pid){
-      var row = card.querySelector('.player-row[data-player="' + pid + '"]');
-      var pd = (data.players && data.players[pid]) || {};
-      row.querySelector(".pred-home").value = pd.pH || "";
-      row.querySelector(".pred-away").value = pd.pA || "";
-      if(stage === "europe" && pd.time){
-        selectToggle(row.querySelector('.toggle-group[data-role="pred-time"]'), pd.time);
+    ref.on("child_added", function(snap){
+      var matchId = snap.key;
+      var existing = cardFor(stage, matchId);
+      if(existing){
+        // seed card already in the static HTML — reconcile once its Firebase node appears
+        applyRemoteToCard(existing, stage, snap.val());
+      } else {
+        var card = buildCard(stage, matchId, snap.val());
+        grid.insertBefore(card, tile);
+        applyPermissionsToCard(card);
+        recompute();
       }
     });
-    return card;
+
+    ref.on("child_changed", function(snap){
+      var card = cardFor(stage, snap.key);
+      if(!card) return;
+      applyRemoteToCard(card, stage, snap.val());
+    });
+
+    ref.on("child_removed", function(snap){
+      var card = cardFor(stage, snap.key);
+      if(card) card.remove();
+      recompute();
+    });
   }
 
-  function applyState(state){
-    if(!state) return;
-    ["league","europe"].forEach(function(stage){
-      var grid = document.querySelector('.card-grid[data-stage-grid="' + stage + '"]');
-      var tile = grid.querySelector(".add-tile");
-      grid.querySelectorAll(".match-card").forEach(function(c){ c.remove(); });
-      (state[stage] || []).forEach(function(m){
-        grid.insertBefore(buildCardFromData(stage, m), tile);
+  function attachStageWatchers(){
+    if(watchersAttached) return;
+    watchersAttached = true;
+    watchStage("league");
+    watchStage("europe");
+
+    firebase.database().ref(".info/connected").on("value", function(snap){
+      var connected = snap.val() === true;
+      setSyncStatus(connected ? "Синхронизировано" : "Подключение…", connected ? "sync-on" : "sync-off");
+    });
+  }
+
+  function applyPermissionsToCard(card){
+    var isAdmin = currentPlayer === ADMIN_PLAYER;
+    var removeBtn = card.querySelector(".match-remove");
+    if(removeBtn) removeBtn.hidden = !isAdmin;
+
+    card.querySelectorAll(".player-row").forEach(function(row){
+      var mine = row.dataset.player === currentPlayer;
+      row.classList.toggle("is-locked", !mine);
+      row.querySelectorAll("input, button").forEach(function(el){
+        el.disabled = !mine;
+      });
+      row.title = mine ? "" : "Прогноз редактирует только " + PLAYER_LABEL[row.dataset.player];
+    });
+  }
+
+  function applyPermissions(){
+    document.querySelectorAll(".match-card").forEach(applyPermissionsToCard);
+    document.querySelectorAll(".add-tile").forEach(function(btn){
+      btn.hidden = currentPlayer !== ADMIN_PLAYER;
+    });
+  }
+
+  // ---------- auth UI ----------
+
+  function setupAuthUI(){
+    var pickWrap = document.getElementById("player-pick");
+    var submitBtn = document.getElementById("auth-submit");
+    var passwordInput = document.getElementById("auth-password");
+    var errorEl = document.getElementById("auth-error");
+    var selected = null;
+
+    function refreshSubmit(){
+      submitBtn.disabled = !(selected && passwordInput.value.length > 0);
+    }
+
+    pickWrap.querySelectorAll(".player-pick-btn").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        pickWrap.querySelectorAll(".player-pick-btn").forEach(function(b){ b.classList.remove("is-selected"); });
+        btn.classList.add("is-selected");
+        selected = btn.dataset.player;
+        errorEl.textContent = "";
+        refreshSubmit();
       });
     });
-    if(state.activeTab){
-      var tabBtn = document.querySelector('.tab-btn[data-tab="' + state.activeTab + '"]');
-      if(tabBtn) tabBtn.click();
-    }
+    passwordInput.addEventListener("input", refreshSubmit);
+
+    document.getElementById("auth-form").addEventListener("submit", function(e){
+      e.preventDefault();
+      if(!selected) return;
+      submitBtn.disabled = true;
+      errorEl.textContent = "";
+      var email = playerEmail(selected);
+      var password = passwordInput.value;
+
+      firebase.auth().signInWithEmailAndPassword(email, password).catch(function(err){
+        if(err.code === "auth/user-not-found"){
+          return firebase.auth().createUserWithEmailAndPassword(email, password);
+        }
+        throw err;
+      }).catch(function(err){
+        var messages = {
+          "auth/wrong-password": "Неверный пароль.",
+          "auth/weak-password": "Пароль слишком короткий — минимум 6 символов.",
+          "auth/invalid-email": "Внутренняя ошибка идентификатора участника.",
+          "auth/too-many-requests": "Слишком много попыток, подождите немного и попробуйте снова."
+        };
+        errorEl.textContent = messages[err.code] || ("Ошибка входа: " + err.message);
+        submitBtn.disabled = false;
+      });
+    });
+
+    document.getElementById("logout-btn").addEventListener("click", function(){
+      firebase.auth().signOut();
+    });
   }
 
-  // ---------- interactions ----------
+  function initFirebase(){
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    db = firebase.database();
+    setupAuthUI();
+
+    firebase.auth().onAuthStateChanged(function(user){
+      var pid = user ? emailToPlayer(user.email) : null;
+      if(pid){
+        currentPlayer = pid;
+        showApp();
+        applyPermissions();
+        attachStageWatchers();
+      } else {
+        currentPlayer = null;
+        showAuthScreen();
+      }
+    });
+  }
+
+  // ---------- wiring: clicks & inputs ----------
 
   function addMatch(stage){
-    var tpl = document.getElementById(stage === "league" ? "tpl-league" : "tpl-europe");
-    var grid = document.querySelector('.card-grid[data-stage-grid="' + stage + '"]');
+    if(db){ addMatchRemote(stage); return; }
+    var grid = gridFor(stage);
     var tile = grid.querySelector(".add-tile");
-    if(!tpl || !grid || !tile) return;
-    var clone = tpl.content.firstElementChild.cloneNode(true);
-    grid.insertBefore(clone, tile);
+    grid.insertBefore(buildCard(stage, nextLocalId(stage), {}), tile);
     recompute();
-    saveState();
+    saveLocal();
   }
 
-  // clicks: add match, remove match, toggle buttons
+  function removeMatch(card){
+    var stage = card.dataset.stage;
+    var matchId = card.dataset.matchId;
+    if(db){ removeMatchRemote(stage, matchId); return; }
+    card.remove();
+    recompute();
+    saveLocal();
+  }
+
   document.body.addEventListener("click", function(e){
     var addBtn = e.target.closest(".add-tile");
     if(addBtn){
@@ -332,18 +533,27 @@
     var rmBtn = e.target.closest(".match-remove");
     if(rmBtn){
       var card = rmBtn.closest(".match-card");
-      if(card) card.remove();
-      recompute();
-      saveState();
+      if(card) removeMatch(card);
       return;
     }
     var btn = e.target.closest(".toggle-btn");
     if(btn){
+      if(btn.disabled) return;
       var group = btn.closest(".toggle-group");
       group.querySelectorAll(".toggle-btn").forEach(function(b){ b.classList.remove("is-selected"); });
       btn.classList.add("is-selected");
       recompute();
-      saveState();
+
+      var matchCard = btn.closest(".match-card");
+      var stage = matchCard.dataset.stage;
+      var matchId = matchCard.dataset.matchId;
+      var row = btn.closest(".player-row");
+      if(row){
+        if(db){ pushPlayerField(stage, matchId, row.dataset.player, { time: btn.dataset.value }); }
+      } else if(group.dataset.role === "actual-time"){
+        if(db){ pushMatchField(stage, matchId, { time: btn.dataset.value }); }
+      }
+      if(!db) saveLocal();
     }
   });
 
@@ -363,22 +573,50 @@
     });
   });
 
-  // score / prediction inputs
+  // score / prediction inputs + team names
   document.body.addEventListener("input", function(e){
-    if(e.target.matches(".score-input, .pred-home, .pred-away")){
+    var el = e.target;
+    var card = el.closest && el.closest(".match-card");
+    if(!card) return;
+    var stage = card.dataset.stage;
+    var matchId = card.dataset.matchId;
+
+    if(el.matches(".actual-home, .actual-away")){
       recompute();
-      saveState();
-    } else if(e.target.matches(".team-name--edit")){
-      saveState();
+      var aH = card.querySelector(".actual-home").value;
+      var aA = card.querySelector(".actual-away").value;
+      if(db){ pushMatchField(stage, matchId, { aH: aH, aA: aA }); } else { saveLocal(); }
+      return;
+    }
+    if(el.matches(".team-home")){
+      if(db){ pushMatchField(stage, matchId, { home: el.textContent.trim() }); } else { saveLocal(); }
+      return;
+    }
+    if(el.matches(".team-away")){
+      if(db){ pushMatchField(stage, matchId, { away: el.textContent.trim() }); } else { saveLocal(); }
+      return;
+    }
+    if(el.matches(".pred-home, .pred-away")){
+      recompute();
+      var row = el.closest(".player-row");
+      var pid = row.dataset.player;
+      var pH = row.querySelector(".pred-home").value;
+      var pA = row.querySelector(".pred-away").value;
+      if(db){ pushPlayerField(stage, matchId, pid, { pH: pH, pA: pA }); } else { saveLocal(); }
     }
   });
 
-  applyState(loadState());
+  // ---------- boot ----------
+
   recompute();
 
-  if(initFirebaseSync()){
-    setSyncStatus("Подключение…", "sync-off");
+  if(isFirebaseConfigured() && typeof firebase !== "undefined"){
+    initFirebase();
   } else {
+    document.getElementById("auth-screen").hidden = true;
+    document.getElementById("app-wrap").hidden = false;
     setSyncStatus("Только в этом браузере", "sync-local");
+    applyLocalState(loadLocal());
+    recompute();
   }
 })();
