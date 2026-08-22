@@ -463,14 +463,16 @@
       var email = playerEmail(selected);
       var password = passwordInput.value;
 
-      firebase.auth().signInWithEmailAndPassword(email, password).catch(function(err){
-        if(err.code === "auth/user-not-found"){
-          return firebase.auth().createUserWithEmailAndPassword(email, password);
-        }
-        throw err;
+      // Modern Firebase Auth returns the same "auth/invalid-credential" for both
+      // "no such account yet" and "wrong password" (email enumeration protection
+      // hides which one it is) — so on any sign-in failure we try to create the
+      // account; if it turns out the account already existed, createUser fails
+      // with "email-already-in-use", which in this flow means "wrong password".
+      firebase.auth().signInWithEmailAndPassword(email, password).catch(function(){
+        return firebase.auth().createUserWithEmailAndPassword(email, password);
       }).catch(function(err){
         var messages = {
-          "auth/wrong-password": "Неверный пароль.",
+          "auth/email-already-in-use": "Неверный пароль.",
           "auth/weak-password": "Пароль слишком короткий — минимум 6 символов.",
           "auth/invalid-email": "Внутренняя ошибка идентификатора участника.",
           "auth/too-many-requests": "Слишком много попыток, подождите немного и попробуйте снова."
