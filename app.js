@@ -301,7 +301,6 @@
   var db = null;
   var currentPlayer = null;
   var watchersAttached = false;
-  var pendingByCard = Object.create(null); // matchId -> latest remote data waiting for focus to clear
   var writeTimers = Object.create(null); // debounce key -> timer id
 
   function isFirebaseConfigured(){
@@ -376,36 +375,58 @@
     });
   }
 
-  function isEditingWithin(card){
-    var el = document.activeElement;
-    return !!(el && card.contains(el));
+  function isEditingWithin(el){
+    var active = document.activeElement;
+    return !!(el && active && el.contains(active));
   }
 
+  // Applies a remote snapshot to an already-rendered card. Match-level
+  // fields (score, team names, kickoff time, auto-sync status) are applied
+  // unconditionally and immediately — predictions locking at kickoff must
+  // never wait on anything. Only an individual player's OWN prediction row
+  // is left untouched while that exact row is being typed into, so a
+  // remote update elsewhere never yanks someone's in-progress keystrokes —
+  // but it still gets locked out the moment the match starts, since
+  // locking is driven by applyPermissionsToCard()/recompute() below, not
+  // by whether that row's displayed value happened to refresh.
   function applyRemoteToCard(card, stage, data){
-    if(isEditingWithin(card)){
-      pendingByCard[card.dataset.matchId] = data;
-      return;
+    data = data || {};
+    card.querySelector(".team-home").textContent = data.home || "";
+    card.querySelector(".team-away").textContent = data.away || "";
+
+    var actualHome = card.querySelector(".actual-home");
+    var actualAway = card.querySelector(".actual-away");
+    if(document.activeElement !== actualHome) actualHome.value = data.aH || "";
+    if(document.activeElement !== actualAway) actualAway.value = data.aA || "";
+
+    card.dataset.fdKickoff = data.fdKickoff || "";
+    var fdIdInput = card.querySelector(".fd-id-input");
+    if(fdIdInput && document.activeElement !== fdIdInput) fdIdInput.value = data.fdId || "";
+    var autoSyncOn = !!data.fdId;
+    card.querySelector("[data-autosync-note]").hidden = !autoSyncOn;
+    actualHome.disabled = autoSyncOn;
+    actualAway.disabled = autoSyncOn;
+
+    if(stage === "europe"){
+      var timeGroup = card.querySelector(".time-row .toggle-group");
+      if(!isEditingWithin(timeGroup)) selectToggle(timeGroup, data.time || null);
+      timeGroup.querySelectorAll(".toggle-btn").forEach(function(b){ b.disabled = autoSyncOn; });
     }
-    populateCardFields(card, stage, data);
+
+    PLAYERS.forEach(function(pid){
+      var row = card.querySelector('.player-row[data-player="' + pid + '"]');
+      if(isEditingWithin(row)) return;
+      var pd = (data.players && data.players[pid]) || {};
+      row.querySelector(".pred-home").value = pd.pH || "";
+      row.querySelector(".pred-away").value = pd.pA || "";
+      if(stage === "europe"){
+        selectToggle(row.querySelector('.toggle-group[data-role="pred-time"]'), pd.time || null);
+      }
+    });
+
     applyPermissionsToCard(card);
     recompute();
   }
-
-  document.addEventListener("focusout", function(e){
-    var card = e.target && e.target.closest && e.target.closest(".match-card");
-    if(!card) return;
-    var matchId = card.dataset.matchId;
-    if(!(matchId in pendingByCard)) return;
-    var data = pendingByCard[matchId];
-    delete pendingByCard[matchId];
-    setTimeout(function(){
-      if(!isEditingWithin(card)){
-        populateCardFields(card, card.dataset.stage, data);
-        applyPermissionsToCard(card);
-        recompute();
-      }
-    }, 50);
-  });
 
   function watchStage(stage){
     var ref = db.ref("predictions/" + stage);
