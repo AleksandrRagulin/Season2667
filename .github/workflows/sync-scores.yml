@@ -2,7 +2,10 @@ name: Sync live scores
 
 on:
   schedule:
-    - cron: "*/10 * * * *" # every 10 minutes — GitHub may delay this under load
+    # Every 10 minutes, offset from the hour — GitHub explicitly recommends
+    # avoiding round numbers (":00, :10, ...") since everyone's schedules
+    # pile up there, making silent drops under load more likely.
+    - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
 
 jobs:
