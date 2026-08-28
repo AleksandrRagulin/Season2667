@@ -36,6 +36,19 @@
     });
   }
 
+  // A match counts as "started" the moment there's an actual result to go
+  // on — a score, or (for eurocups) how it ended. That's the same signal
+  // used to award points, and it's what closes predictions to everyone,
+  // including their own owner.
+  function isMatchStarted(card){
+    var stage = card.dataset.stage;
+    var aH = num(card.querySelector(".actual-home"));
+    var aA = num(card.querySelector(".actual-away"));
+    if(stage === "league") return aH !== null && aA !== null;
+    var actualTime = selectedValue(card.querySelector(".time-row .toggle-group"));
+    return (aH !== null && aA !== null) || !!actualTime;
+  }
+
   function leaguePoints(aH,aA,pH,pA){
     if(aH===null||aA===null||pH===null||pA===null) return null;
     var pts = 0;
@@ -90,9 +103,7 @@
       var statusEl = card.querySelector("[data-status]");
       var actualTime = stage === "europe" ? selectedValue(card.querySelector('.time-row .toggle-group')) : null;
 
-      var played = stage === "league"
-        ? (aH!==null && aA!==null)
-        : (aH!==null && aA!==null) || actualTime;
+      var played = isMatchStarted(card);
 
       if(statusEl){
         statusEl.textContent = played ? "Матч сыгран" : "Ожидается";
@@ -106,6 +117,8 @@
         var pA = num(row.querySelector(".pred-away"));
         var badge = row.querySelector(".points-badge");
         var pts;
+
+        applyRowLock(row, played);
 
         if(stage === "league"){
           pts = leaguePoints(aH,aA,pH,pA);
@@ -424,6 +437,23 @@
     });
   }
 
+  // A prediction row is locked either because it isn't the signed-in
+  // player's own row, or because the match has already started (once it
+  // has, nobody — including its owner — may still change a prediction).
+  // Called both when permissions change (login, new card) and from
+  // recompute() on every data change, so either trigger keeps it correct.
+  function applyRowLock(row, started){
+    var mine = !db || row.dataset.player === currentPlayer;
+    row.classList.toggle("is-locked", !mine);
+    row.classList.toggle("is-final", mine && started);
+    row.querySelectorAll("input, button").forEach(function(el){
+      el.disabled = !mine || started;
+    });
+    row.title = !mine
+      ? "Прогноз редактирует только " + PLAYER_LABEL[row.dataset.player]
+      : (started ? "Матч начался — прогнозы больше нельзя менять" : "");
+  }
+
   function applyPermissionsToCard(card){
     var isAdmin = currentPlayer === ADMIN_PLAYER;
     var removeBtn = card.querySelector(".match-remove");
@@ -431,13 +461,9 @@
     var autoSyncField = card.querySelector(".autosync-field");
     if(autoSyncField) autoSyncField.hidden = !isAdmin;
 
+    var started = isMatchStarted(card);
     card.querySelectorAll(".player-row").forEach(function(row){
-      var mine = row.dataset.player === currentPlayer;
-      row.classList.toggle("is-locked", !mine);
-      row.querySelectorAll("input, button").forEach(function(el){
-        el.disabled = !mine;
-      });
-      row.title = mine ? "" : "Прогноз редактирует только " + PLAYER_LABEL[row.dataset.player];
+      applyRowLock(row, started);
     });
   }
 

@@ -282,6 +282,9 @@
   .player-row.is-locked{ opacity:.55; }
   .player-row.is-locked .pred-home,
   .player-row.is-locked .pred-away{ cursor:not-allowed; }
+  .player-row.is-final{ opacity:.75; }
+  .player-row.is-final .pred-home,
+  .player-row.is-final .pred-away{ cursor:not-allowed; }
   .add-tile[hidden], .match-remove[hidden]{ display:none; }
 
   /* ---------- leaderboard ---------- */
