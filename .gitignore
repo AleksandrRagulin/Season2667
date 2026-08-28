@@ -1,0 +1,6 @@
+# Firebase service account keys — full admin access, never commit.
+# These belong only in the FIREBASE_SERVICE_ACCOUNT GitHub Actions secret.
+*firebase-adminsdk*.json
+serviceAccountKey.json
+
+node_modules/
