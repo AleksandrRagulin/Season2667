@@ -155,6 +155,17 @@
     if(stage === "europe"){
       selectToggle(card.querySelector(".time-row .toggle-group"), data.time || null);
     }
+
+    var fdIdInput = card.querySelector(".fd-id-input");
+    if(fdIdInput && document.activeElement !== fdIdInput) fdIdInput.value = data.fdId || "";
+    var autoSyncOn = !!data.fdId;
+    card.querySelector("[data-autosync-note]").hidden = !autoSyncOn;
+    card.querySelector(".actual-home").disabled = autoSyncOn;
+    card.querySelector(".actual-away").disabled = autoSyncOn;
+    var actualTimeGroup = stage === "europe" ? card.querySelector(".time-row .toggle-group") : null;
+    if(actualTimeGroup){
+      actualTimeGroup.querySelectorAll(".toggle-btn").forEach(function(b){ b.disabled = autoSyncOn; });
+    }
     PLAYERS.forEach(function(pid){
       var row = card.querySelector('.player-row[data-player="' + pid + '"]');
       var pd = (data.players && data.players[pid]) || {};
@@ -293,29 +304,33 @@
     document.getElementById("session-name").textContent = PLAYER_LABEL[currentPlayer] || currentPlayer;
   }
 
-  function scheduleWrite(key, fn, delay){
-    clearTimeout(writeTimers[key]);
-    writeTimers[key] = setTimeout(fn, delay || 350);
+  var pendingPatches = Object.create(null); // ref path -> merged patch awaiting write
+
+  // Merges `patch` into whatever is already pending for `refPath` and (re)starts
+  // its debounce timer, so editing two different fields of the same node in
+  // quick succession sends both instead of the later write clobbering the
+  // earlier one.
+  function scheduleFieldWrite(refPath, patch, delay){
+    if(!db) return;
+    var merged = pendingPatches[refPath] || {};
+    Object.assign(merged, patch);
+    pendingPatches[refPath] = merged;
+    clearTimeout(writeTimers[refPath]);
+    writeTimers[refPath] = setTimeout(function(){
+      var toSend = pendingPatches[refPath];
+      delete pendingPatches[refPath];
+      db.ref(refPath).update(toSend).catch(function(err){
+        console.warn("Firebase: не удалось сохранить:", err);
+      });
+    }, delay || 350);
   }
 
   function pushMatchField(stage, matchId, patch){
-    if(!db) return;
-    var key = stage + "/" + matchId + ":match";
-    scheduleWrite(key, function(){
-      db.ref("predictions/" + stage + "/" + matchId).update(patch).catch(function(err){
-        console.warn("Firebase: не удалось сохранить поле матча:", err);
-      });
-    });
+    scheduleFieldWrite("predictions/" + stage + "/" + matchId, patch);
   }
 
   function pushPlayerField(stage, matchId, pid, patch){
-    if(!db) return;
-    var key = stage + "/" + matchId + "/" + pid;
-    scheduleWrite(key, function(){
-      db.ref("predictions/" + stage + "/" + matchId + "/players/" + pid).update(patch).catch(function(err){
-        console.warn("Firebase: не удалось сохранить прогноз:", err);
-      });
-    });
+    scheduleFieldWrite("predictions/" + stage + "/" + matchId + "/players/" + pid, patch);
   }
 
   function addMatchRemote(stage){
@@ -413,6 +428,8 @@
     var isAdmin = currentPlayer === ADMIN_PLAYER;
     var removeBtn = card.querySelector(".match-remove");
     if(removeBtn) removeBtn.hidden = !isAdmin;
+    var autoSyncField = card.querySelector(".autosync-field");
+    if(autoSyncField) autoSyncField.hidden = !isAdmin;
 
     card.querySelectorAll(".player-row").forEach(function(row){
       var mine = row.dataset.player === currentPlayer;
@@ -596,6 +613,12 @@
     }
     if(el.matches(".team-away")){
       if(db){ pushMatchField(stage, matchId, { away: el.textContent.trim() }); } else { saveLocal(); }
+      return;
+    }
+    if(el.matches(".fd-id-input")){
+      if(currentPlayer !== ADMIN_PLAYER) return;
+      var fdId = el.value.trim();
+      if(db){ pushMatchField(stage, matchId, { fdId: fdId || null }); }
       return;
     }
     if(el.matches(".pred-home, .pred-away")){

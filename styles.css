@@ -511,6 +511,45 @@
     letter-spacing:0;
   }
 
+  /* ---------- auto-sync (API-Football) row ---------- */
+  .autosync-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    margin:-2px 0 10px;
+  }
+  .autosync-note{
+    font-size:.74rem;
+    font-weight:600;
+    color:var(--good);
+    background:var(--good-soft);
+    padding:3px 9px;
+    border-radius:999px;
+  }
+  .autosync-field{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:.72rem;
+    color:var(--ink-muted);
+    margin-left:auto;
+  }
+  .autosync-field[hidden]{ display:none; }
+  .fd-id-input{
+    width:8em;
+    font-family:var(--font-mono);
+    font-size:.8rem;
+    padding:4px 7px;
+    border-radius:7px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--ink);
+  }
+  .fd-id-input:focus{ border-color:var(--accent); }
+  .score-input:disabled, .toggle-btn:disabled{ opacity:.5; cursor:not-allowed; }
+
   .score-inputs{
     display:flex;
     align-items:center;

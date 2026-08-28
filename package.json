@@ -1,0 +1,12 @@
+{
+  "name": "season2627-score-sync",
+  "private": true,
+  "description": "Scheduled job that pulls live scores from API-Football into Firebase for the Season2627 prediction site.",
+  "type": "module",
+  "scripts": {
+    "sync-scores": "node scripts/sync-scores.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}
