@@ -8,15 +8,24 @@
 //   API_FOOTBALL_KEY          — key from dashboard.api-football.com
 //
 // A match is "tracked" once someone (only Александр Р. can, via the site)
-// sets its "ID матча в API-Football" field. Once API-Football reports a
-// terminal status (finished, in any way), the match is flagged fdDone and
-// this script stops spending API quota on it.
+// sets its "ID матча в API-Football" field.
+//
+// The free API-Football plan has no batch (?ids=) endpoint — every fixture
+// costs its own request, against a 100/day quota — so this script is careful
+// to only spend a request on a match that's actually close to kickoff or
+// already playing, learned once via fdKickoff (cached after the first
+// look-up) rather than polling blindly from the moment fdId is set. Once a
+// match reaches a final status it's flagged fdDone and never polled again.
 
 import admin from "firebase-admin";
 
 const STAGES = ["league", "europe"];
 const TERMINAL_STATUSES = new Set(["FT", "AET", "PEN", "CANC", "ABD", "AWD", "WO"]);
-const MAX_IDS_PER_REQUEST = 20; // API-Football's documented batch limit for ?ids=
+
+// How close to kickoff we start spending requests, and how long after
+// kickoff we keep trying before giving up (covers delays/ET/penalties).
+const WINDOW_BEFORE_MS = 20 * 60 * 1000;
+const WINDOW_AFTER_MS = 3.5 * 60 * 60 * 1000;
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -27,10 +36,37 @@ function requireEnv(name) {
   return value;
 }
 
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+async function fetchFixture(fdId, apiKey) {
+  const res = await fetch(`https://v3.football.api-sports.io/fixtures?id=${fdId}`, {
+    headers: { "x-apisports-key": apiKey },
+  });
+  if (!res.ok) {
+    console.error(`API-Football request failed for id ${fdId}: ${res.status} ${res.statusText}`);
+    return null;
+  }
+  const json = await res.json();
+  if (json.errors && Object.keys(json.errors).length) {
+    console.error(`API-Football error for id ${fdId}:`, json.errors);
+    return null;
+  }
+  return json.response && json.response[0] ? json.response[0] : null;
+}
+
+function fixtureToPatch(fx, stage) {
+  const status = fx.fixture.status.short;
+  const patch = { fdKickoff: fx.fixture.date };
+
+  if (fx.goals.home !== null && fx.goals.home !== undefined) patch.aH = String(fx.goals.home);
+  if (fx.goals.away !== null && fx.goals.away !== undefined) patch.aA = String(fx.goals.away);
+
+  if (stage === "europe") {
+    if (fx.score.penalty && fx.score.penalty.home !== null) patch.time = "pen";
+    else if (fx.score.extratime && fx.score.extratime.home !== null) patch.time = "et";
+    else if (TERMINAL_STATUSES.has(status)) patch.time = "reg";
+  }
+
+  if (TERMINAL_STATUSES.has(status)) patch.fdDone = true;
+  return patch;
 }
 
 async function main() {
@@ -44,73 +80,43 @@ async function main() {
     databaseURL,
   });
   const db = admin.database();
+  const now = Date.now();
 
-  // 1. Collect every match that has an fdId and isn't already marked done.
-  const tracked = [];
+  let requestsSpent = 0;
+
   for (const stage of STAGES) {
     const snap = await db.ref(`predictions/${stage}`).get();
     const matches = snap.val() || {};
+
     for (const [matchId, m] of Object.entries(matches)) {
-      if (m && m.fdId && !m.fdDone) {
-        tracked.push({ stage, matchId, fdId: String(m.fdId) });
+      if (!m || !m.fdId || m.fdDone) continue;
+      const path = `${stage}/${matchId}`;
+
+      if (m.fdKickoff) {
+        const kickoff = new Date(m.fdKickoff).getTime();
+        if (now < kickoff - WINDOW_BEFORE_MS) {
+          console.log(`${path}: kickoff not close yet (${m.fdKickoff}) — skipping.`);
+          continue;
+        }
+        if (now > kickoff + WINDOW_AFTER_MS) {
+          console.log(`${path}: well past kickoff window (${m.fdKickoff}) and still not finished — skipping this run.`);
+          continue;
+        }
       }
+      // No cached kickoff yet — worth one request to learn it, even if it
+      // turns out to be far in the future (only happens once per match).
+
+      const fx = await fetchFixture(m.fdId, apiKey);
+      requestsSpent += 1;
+      if (!fx) continue;
+
+      const patch = fixtureToPatch(fx, stage);
+      await db.ref(`predictions/${path}`).update(patch);
+      console.log(`${path}: updated`, patch);
     }
   }
 
-  if (tracked.length === 0) {
-    console.log("No tracked matches pending — nothing to do.");
-    return;
-  }
-  console.log(`Tracking ${tracked.length} match(es):`, tracked.map((t) => `${t.stage}/${t.matchId}#${t.fdId}`).join(", "));
-
-  // 2. Fetch all of them in as few requests as possible.
-  const fixturesById = new Map();
-  for (const ids of chunk(tracked.map((t) => t.fdId), MAX_IDS_PER_REQUEST)) {
-    const url = `https://v3.football.api-sports.io/fixtures?ids=${ids.join("-")}`;
-    const res = await fetch(url, { headers: { "x-apisports-key": apiKey } });
-    if (!res.ok) {
-      console.error(`API-Football request failed: ${res.status} ${res.statusText}`);
-      continue;
-    }
-    const json = await res.json();
-    if (json.errors && Object.keys(json.errors).length) {
-      console.error("API-Football returned errors:", json.errors);
-    }
-    for (const item of json.response || []) {
-      fixturesById.set(String(item.fixture.id), item);
-    }
-  }
-
-  // 3. Map each fixture onto our schema and write only what changed.
-  for (const t of tracked) {
-    const fx = fixturesById.get(t.fdId);
-    if (!fx) {
-      console.warn(`No data returned for ${t.stage}/${t.matchId} (fdId ${t.fdId})`);
-      continue;
-    }
-
-    const status = fx.fixture.status.short;
-    const patch = {};
-
-    if (fx.goals.home !== null && fx.goals.home !== undefined) patch.aH = String(fx.goals.home);
-    if (fx.goals.away !== null && fx.goals.away !== undefined) patch.aA = String(fx.goals.away);
-
-    if (t.stage === "europe") {
-      if (fx.score.penalty && fx.score.penalty.home !== null) patch.time = "pen";
-      else if (fx.score.extratime && fx.score.extratime.home !== null) patch.time = "et";
-      else if (TERMINAL_STATUSES.has(status)) patch.time = "reg";
-    }
-
-    if (TERMINAL_STATUSES.has(status)) patch.fdDone = true;
-
-    if (Object.keys(patch).length === 0) {
-      console.log(`${t.stage}/${t.matchId}: status ${status}, nothing to update yet.`);
-      continue;
-    }
-
-    await db.ref(`predictions/${t.stage}/${t.matchId}`).update(patch);
-    console.log(`${t.stage}/${t.matchId}: updated`, patch);
-  }
+  console.log(`Done. API requests spent this run: ${requestsSpent}.`);
 }
 
 main()
