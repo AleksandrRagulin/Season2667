@@ -36,17 +36,27 @@
     });
   }
 
-  // A match counts as "started" the moment there's an actual result to go
-  // on — a score, or (for eurocups) how it ended. That's the same signal
-  // used to award points, and it's what closes predictions to everyone,
-  // including their own owner.
+  // A match counts as "started" once there's an actual result to go on (a
+  // score, or for eurocups how it ended — the same signal used to award
+  // points), OR its cached kickoff time has passed. The kickoff check
+  // matters because the sync bot only checks a live match every ~10
+  // minutes: without it, predictions would stay open for however long
+  // after the real kickoff until the bot's next run first writes a score.
+  // Manually-entered matches have no kickoff time to go on, so for those
+  // this still only locks once a real score is typed in.
   function isMatchStarted(card){
     var stage = card.dataset.stage;
     var aH = num(card.querySelector(".actual-home"));
     var aA = num(card.querySelector(".actual-away"));
-    if(stage === "league") return aH !== null && aA !== null;
-    var actualTime = selectedValue(card.querySelector(".time-row .toggle-group"));
-    return (aH !== null && aA !== null) || !!actualTime;
+    var hasScore = aH !== null && aA !== null;
+    if(stage !== "league"){
+      var actualTime = selectedValue(card.querySelector(".time-row .toggle-group"));
+      hasScore = hasScore || !!actualTime;
+    }
+    if(hasScore) return true;
+
+    var kickoff = card.dataset.fdKickoff;
+    return !!kickoff && Date.now() >= new Date(kickoff).getTime();
   }
 
   function leaguePoints(aH,aA,pH,pA){
@@ -165,6 +175,10 @@
     card.querySelector(".team-away").textContent = data.away || "";
     card.querySelector(".actual-home").value = data.aH || "";
     card.querySelector(".actual-away").value = data.aA || "";
+    // Cached by the sync bot the first time it looks the fixture up — lets
+    // us lock predictions exactly at kickoff instead of only once the bot's
+    // next run actually writes a score (see isMatchStarted).
+    card.dataset.fdKickoff = data.fdKickoff || "";
     if(stage === "europe"){
       selectToggle(card.querySelector(".time-row .toggle-group"), data.time || null);
     }
@@ -660,6 +674,11 @@
   // ---------- boot ----------
 
   recompute();
+
+  // Kickoff-time locking (see isMatchStarted) depends on wall-clock time,
+  // not just on data changing — without this, a card left open in a
+  // browser wouldn't lock until *something* else triggered a recompute.
+  setInterval(recompute, 20000);
 
   if(isFirebaseConfigured() && typeof firebase !== "undefined"){
     initFirebase();
