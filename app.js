@@ -473,12 +473,13 @@
   }
 
   // A prediction row is locked either because it isn't the signed-in
-  // player's own row, or because the match has already started (once it
-  // has, nobody — including its owner — may still change a prediction).
+  // player's own row (and they aren't the admin, who may edit anyone's
+  // prediction), or because the match has already started (once it has,
+  // nobody — including its owner or the admin — may still change it).
   // Called both when permissions change (login, new card) and from
   // recompute() on every data change, so either trigger keeps it correct.
   function applyRowLock(row, started){
-    var mine = !db || row.dataset.player === currentPlayer;
+    var mine = !db || row.dataset.player === currentPlayer || currentPlayer === ADMIN_PLAYER;
     row.classList.toggle("is-locked", !mine);
     row.classList.toggle("is-final", mine && started);
     row.querySelectorAll("input, button").forEach(function(el){
