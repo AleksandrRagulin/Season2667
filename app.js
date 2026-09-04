@@ -36,6 +36,30 @@
     });
   }
 
+  // Renders an ISO kickoff timestamp (as learned by the sync bot from
+  // API-Football) in Central European time, correctly following the
+  // CET/CEST daylight-saving switch — no manual offset math needed.
+  var kickoffFormatter = (typeof Intl !== "undefined") ? new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Berlin",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }) : null;
+  function formatKickoffCET(iso){
+    if(!iso || !kickoffFormatter) return "";
+    var d = new Date(iso);
+    if(isNaN(d.getTime())) return "";
+    return kickoffFormatter.format(d) + " CET";
+  }
+  function updateKickoffNote(card, iso){
+    var note = card.querySelector("[data-fd-kickoff-note]");
+    if(!note) return;
+    var text = formatKickoffCET(iso);
+    note.textContent = text;
+    note.hidden = !text;
+  }
+
   // A match counts as "started" once there's an actual result to go on (a
   // score, or for eurocups how it ended — the same signal used to award
   // points), OR its cached kickoff time has passed. The kickoff check
@@ -179,6 +203,7 @@
     // us lock predictions exactly at kickoff instead of only once the bot's
     // next run actually writes a score (see isMatchStarted).
     card.dataset.fdKickoff = data.fdKickoff || "";
+    updateKickoffNote(card, data.fdKickoff);
     if(stage === "europe"){
       selectToggle(card.querySelector(".time-row .toggle-group"), data.time || null);
     }
@@ -400,6 +425,7 @@
     if(document.activeElement !== actualAway) actualAway.value = data.aA || "";
 
     card.dataset.fdKickoff = data.fdKickoff || "";
+    updateKickoffNote(card, data.fdKickoff);
     var fdIdInput = card.querySelector(".fd-id-input");
     if(fdIdInput && document.activeElement !== fdIdInput) fdIdInput.value = data.fdId || "";
     var autoSyncOn = !!data.fdId;

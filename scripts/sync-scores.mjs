@@ -52,9 +52,17 @@ async function fetchFixture(fdId, apiKey) {
   return json.response && json.response[0] ? json.response[0] : null;
 }
 
-function fixtureToPatch(fx, stage) {
+function fixtureToPatch(fx, stage, learnNames) {
   const status = fx.fixture.status.short;
   const patch = { fdKickoff: fx.fixture.date };
+
+  // Team names only need to be written once, the first time we see this
+  // fixture (learnNames) — otherwise a re-fetch could stomp a name someone
+  // deliberately edited by hand on the site afterwards.
+  if (learnNames) {
+    if (fx.teams.home && fx.teams.home.name) patch.home = fx.teams.home.name;
+    if (fx.teams.away && fx.teams.away.name) patch.away = fx.teams.away.name;
+  }
 
   if (fx.goals.home !== null && fx.goals.home !== undefined) patch.aH = String(fx.goals.home);
   if (fx.goals.away !== null && fx.goals.away !== undefined) patch.aA = String(fx.goals.away);
@@ -92,6 +100,8 @@ async function main() {
       if (!m || !m.fdId || m.fdDone) continue;
       const path = `${stage}/${matchId}`;
 
+      const learnNames = !m.fdKickoff; // first time we see this fixture
+
       if (m.fdKickoff) {
         const kickoff = new Date(m.fdKickoff).getTime();
         if (now < kickoff - WINDOW_BEFORE_MS) {
@@ -103,14 +113,15 @@ async function main() {
           continue;
         }
       }
-      // No cached kickoff yet — worth one request to learn it, even if it
-      // turns out to be far in the future (only happens once per match).
+      // No cached kickoff yet — worth one request to learn it (and the
+      // team names) even if kickoff turns out to be far in the future
+      // (only happens once per match).
 
       const fx = await fetchFixture(m.fdId, apiKey);
       requestsSpent += 1;
       if (!fx) continue;
 
-      const patch = fixtureToPatch(fx, stage);
+      const patch = fixtureToPatch(fx, stage, learnNames);
       await db.ref(`predictions/${path}`).update(patch);
       console.log(`${path}: updated`, patch);
     }

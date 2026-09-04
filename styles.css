@@ -540,6 +540,15 @@
     margin-left:auto;
   }
   .autosync-field[hidden]{ display:none; }
+  .fd-kickoff-note{
+    font-size:.74rem;
+    font-weight:600;
+    color:var(--ink-muted);
+    background:var(--surface-2);
+    padding:3px 9px;
+    border-radius:999px;
+  }
+  .fd-kickoff-note[hidden]{ display:none; }
   .fd-id-input{
     width:8em;
     font-family:var(--font-mono);
