@@ -108,9 +108,15 @@ async function main() {
           console.log(`${path}: kickoff not close yet (${m.fdKickoff}) — skipping.`);
           continue;
         }
+        // Deliberately no upper cutoff here: a match that's still not
+        // fdDone this long after kickoff almost always means a run was
+        // missed during the normal window (the GitHub Actions schedule
+        // trigger isn't perfectly reliable), not that the match is stuck.
+        // Keep polling every run until a terminal status actually arrives,
+        // so a missed window costs a delay rather than a permanently
+        // unrecorded result.
         if (now > kickoff + WINDOW_AFTER_MS) {
-          console.log(`${path}: well past kickoff window (${m.fdKickoff}) and still not finished — skipping this run.`);
-          continue;
+          console.log(`${path}: well past kickoff window (${m.fdKickoff}) and still not finished — checking anyway.`);
         }
       }
       // No cached kickoff yet — worth one request to learn it (and the
