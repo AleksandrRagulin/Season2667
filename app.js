@@ -23,19 +23,6 @@
     return isNaN(n) ? null : n;
   }
 
-  function selectedValue(group){
-    if(!group) return null;
-    var btn = group.querySelector(".toggle-btn.is-selected");
-    return btn ? btn.dataset.value : null;
-  }
-
-  function selectToggle(group, value){
-    if(!group) return;
-    group.querySelectorAll(".toggle-btn").forEach(function(b){
-      b.classList.toggle("is-selected", b.dataset.value === value);
-    });
-  }
-
   // Renders an ISO kickoff timestamp (as learned by the sync bot from
   // API-Football) in Central European time, correctly following the
   // CET/CEST daylight-saving switch — no manual offset math needed.
@@ -61,28 +48,26 @@
   }
 
   // A match counts as "started" once there's an actual result to go on (a
-  // score, or for eurocups how it ended — the same signal used to award
-  // points), OR its cached kickoff time has passed. The kickoff check
-  // matters because the sync bot only checks a live match every ~10
-  // minutes: without it, predictions would stay open for however long
-  // after the real kickoff until the bot's next run first writes a score.
-  // Manually-entered matches have no kickoff time to go on, so for those
-  // this still only locks once a real score is typed in.
+  // score — the same signal used to award points), OR its cached kickoff
+  // time has passed. The kickoff check matters because the sync bot only
+  // checks a live match every ~10 minutes: without it, predictions would
+  // stay open for however long after the real kickoff until the bot's next
+  // run first writes a score. Manually-entered matches have no kickoff time
+  // to go on, so for those this still only locks once a real score is
+  // typed in.
   function isMatchStarted(card){
-    var stage = card.dataset.stage;
     var aH = num(card.querySelector(".actual-home"));
     var aA = num(card.querySelector(".actual-away"));
-    var hasScore = aH !== null && aA !== null;
-    if(stage !== "league"){
-      var actualTime = selectedValue(card.querySelector(".time-row .toggle-group"));
-      hasScore = hasScore || !!actualTime;
-    }
-    if(hasScore) return true;
+    if(aH !== null && aA !== null) return true;
 
     var kickoff = card.dataset.fdKickoff;
     return !!kickoff && Date.now() >= new Date(kickoff).getTime();
   }
 
+  // Group-stage scoring — same formula for both "Лиги" and "Еврокубки" for
+  // now (90 minutes only, no extra time/penalties format to guess). When
+  // the eurocup knockout rounds start this will need a time-format bonus
+  // again; see git history for the previous europeScorePoints/timePoints.
   function leaguePoints(aH,aA,pH,pA){
     if(aH===null||aA===null||pH===null||pA===null) return null;
     var pts = 0;
@@ -91,24 +76,6 @@
     if((aH-aA) === (pH-pA)) pts += 1;
     if(aH===pH && aA===pA) pts += 2;
     return pts;
-  }
-
-  function europeScorePoints(aH,aA,pH,pA){
-    if(aH===null||aA===null||pH===null||pA===null) return null;
-    var pts = 0;
-    var aSign = Math.sign(aH-aA), pSign = Math.sign(pH-pA);
-    if(aSign === pSign) pts += 2;
-    if((aH-aA) === (pH-pA)) pts += 1;
-    if(aH===pH && aA===pA) pts += 2;
-    return pts;
-  }
-
-  function timePoints(actualTime, predTime){
-    if(!actualTime || !predTime) return null;
-    if(actualTime === predTime) return 2;
-    var isEtOrPen = function(v){ return v==="et" || v==="pen"; };
-    if(isEtOrPen(actualTime) && isEtOrPen(predTime)) return 1;
-    return 0;
   }
 
   function badgeClass(pts, maxExact){
@@ -135,7 +102,6 @@
       var aH = num(card.querySelector(".actual-home"));
       var aA = num(card.querySelector(".actual-away"));
       var statusEl = card.querySelector("[data-status]");
-      var actualTime = stage === "europe" ? selectedValue(card.querySelector('.time-row .toggle-group')) : null;
 
       var played = isMatchStarted(card);
 
@@ -154,18 +120,11 @@
 
         applyRowLock(row, played);
 
-        if(stage === "league"){
-          pts = leaguePoints(aH,aA,pH,pA);
-          if(pts !== null) leagueTotals[pid] += pts;
-          setBadge(badge, pts, 4);
-        } else {
-          var predTime = selectedValue(row.querySelector('.toggle-group[data-role="pred-time"]'));
-          var sPts = europeScorePoints(aH,aA,pH,pA);
-          var tPts = timePoints(actualTime, predTime);
-          pts = (sPts===null && tPts===null) ? null : (sPts||0) + (tPts||0);
-          if(pts !== null) europeTotals[pid] += pts;
-          setBadge(badge, pts, 7);
+        pts = leaguePoints(aH,aA,pH,pA);
+        if(pts !== null){
+          if(stage === "league") leagueTotals[pid] += pts; else europeTotals[pid] += pts;
         }
+        setBadge(badge, pts, 4);
       });
     });
 
@@ -204,9 +163,6 @@
     // next run actually writes a score (see isMatchStarted).
     card.dataset.fdKickoff = data.fdKickoff || "";
     updateKickoffNote(card, data.fdKickoff);
-    if(stage === "europe"){
-      selectToggle(card.querySelector(".time-row .toggle-group"), data.time || null);
-    }
 
     var fdIdInput = card.querySelector(".fd-id-input");
     if(fdIdInput && document.activeElement !== fdIdInput) fdIdInput.value = data.fdId || "";
@@ -214,18 +170,11 @@
     card.querySelector("[data-autosync-note]").hidden = !autoSyncOn;
     card.querySelector(".actual-home").disabled = autoSyncOn;
     card.querySelector(".actual-away").disabled = autoSyncOn;
-    var actualTimeGroup = stage === "europe" ? card.querySelector(".time-row .toggle-group") : null;
-    if(actualTimeGroup){
-      actualTimeGroup.querySelectorAll(".toggle-btn").forEach(function(b){ b.disabled = autoSyncOn; });
-    }
     PLAYERS.forEach(function(pid){
       var row = card.querySelector('.player-row[data-player="' + pid + '"]');
       var pd = (data.players && data.players[pid]) || {};
       row.querySelector(".pred-home").value = pd.pH || "";
       row.querySelector(".pred-away").value = pd.pA || "";
-      if(stage === "europe"){
-        selectToggle(row.querySelector('.toggle-group[data-role="pred-time"]'), pd.time || null);
-      }
     });
   }
 
@@ -256,16 +205,9 @@
       aA: card.querySelector(".actual-away").value,
       players: {}
     };
-    if(stage === "europe"){
-      data.time = selectedValue(card.querySelector(".time-row .toggle-group"));
-    }
     card.querySelectorAll(".player-row").forEach(function(row){
       var pid = row.dataset.player;
-      var pd = { pH: row.querySelector(".pred-home").value, pA: row.querySelector(".pred-away").value };
-      if(stage === "europe"){
-        pd.time = selectedValue(row.querySelector('.toggle-group[data-role="pred-time"]'));
-      }
-      data.players[pid] = pd;
+      data.players[pid] = { pH: row.querySelector(".pred-home").value, pA: row.querySelector(".pred-away").value };
     });
     return data;
   }
@@ -433,21 +375,12 @@
     actualHome.disabled = autoSyncOn;
     actualAway.disabled = autoSyncOn;
 
-    if(stage === "europe"){
-      var timeGroup = card.querySelector(".time-row .toggle-group");
-      if(!isEditingWithin(timeGroup)) selectToggle(timeGroup, data.time || null);
-      timeGroup.querySelectorAll(".toggle-btn").forEach(function(b){ b.disabled = autoSyncOn; });
-    }
-
     PLAYERS.forEach(function(pid){
       var row = card.querySelector('.player-row[data-player="' + pid + '"]');
       if(isEditingWithin(row)) return;
       var pd = (data.players && data.players[pid]) || {};
       row.querySelector(".pred-home").value = pd.pH || "";
       row.querySelector(".pred-away").value = pd.pA || "";
-      if(stage === "europe"){
-        selectToggle(row.querySelector('.toggle-group[data-role="pred-time"]'), pd.time || null);
-      }
     });
 
     applyPermissionsToCard(card);
@@ -642,25 +575,6 @@
       var card = rmBtn.closest(".match-card");
       if(card) removeMatch(card);
       return;
-    }
-    var btn = e.target.closest(".toggle-btn");
-    if(btn){
-      if(btn.disabled) return;
-      var group = btn.closest(".toggle-group");
-      group.querySelectorAll(".toggle-btn").forEach(function(b){ b.classList.remove("is-selected"); });
-      btn.classList.add("is-selected");
-      recompute();
-
-      var matchCard = btn.closest(".match-card");
-      var stage = matchCard.dataset.stage;
-      var matchId = matchCard.dataset.matchId;
-      var row = btn.closest(".player-row");
-      if(row){
-        if(db){ pushPlayerField(stage, matchId, row.dataset.player, { time: btn.dataset.value }); }
-      } else if(group.dataset.role === "actual-time"){
-        if(db){ pushMatchField(stage, matchId, { time: btn.dataset.value }); }
-      }
-      if(!db) saveLocal();
     }
   });
 

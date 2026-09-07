@@ -52,7 +52,10 @@ async function fetchFixture(fdId, apiKey) {
   return json.response && json.response[0] ? json.response[0] : null;
 }
 
-function fixtureToPatch(fx, stage, learnNames) {
+// Group-stage matches (both "league" and "europe" tabs) are plain 90
+// minutes for now, so there's no completion-format ("time") field to
+// learn — that comes back once the eurocup knockout rounds start.
+function fixtureToPatch(fx, learnNames) {
   const status = fx.fixture.status.short;
   const patch = { fdKickoff: fx.fixture.date };
 
@@ -66,12 +69,6 @@ function fixtureToPatch(fx, stage, learnNames) {
 
   if (fx.goals.home !== null && fx.goals.home !== undefined) patch.aH = String(fx.goals.home);
   if (fx.goals.away !== null && fx.goals.away !== undefined) patch.aA = String(fx.goals.away);
-
-  if (stage === "europe") {
-    if (fx.score.penalty && fx.score.penalty.home !== null) patch.time = "pen";
-    else if (fx.score.extratime && fx.score.extratime.home !== null) patch.time = "et";
-    else if (TERMINAL_STATUSES.has(status)) patch.time = "reg";
-  }
 
   if (TERMINAL_STATUSES.has(status)) patch.fdDone = true;
   return patch;
@@ -127,7 +124,7 @@ async function main() {
       requestsSpent += 1;
       if (!fx) continue;
 
-      const patch = fixtureToPatch(fx, stage, learnNames);
+      const patch = fixtureToPatch(fx, learnNames);
       await db.ref(`predictions/${path}`).update(patch);
       console.log(`${path}: updated`, patch);
     }

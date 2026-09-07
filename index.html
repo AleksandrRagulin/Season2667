@@ -145,12 +145,11 @@
     <details class="rules" open>
       <summary>Как считаются баллы в еврокубках</summary>
       <div class="rules-body">
-        <div class="rules-row"><span>Угадан исход (победитель матча)</span><span>2</span></div>
+        <p class="rules-note">Групповой этап — как обычные лиги, 90 минут. Формат завершения матча (доп. время / пенальти) вернётся здесь, когда начнётся плей-офф.</p>
+        <div class="rules-row"><span>Угадан исход (победа любой команды или ничья)</span><span>1</span></div>
         <div class="rules-row"><span>+ угадана разница мячей</span><span>+1</span></div>
         <div class="rules-row"><span>+ угадан точный счёт</span><span>+2</span></div>
-        <div class="rules-row"><span>Точно угадано время завершения</span><span>2</span></div>
-        <div class="rules-row"><span>Доп. время / пенальти перепутаны местами</span><span>1</span></div>
-        <div class="rules-row"><span><b>Максимум за матч</b></span><span><b>7</b></span></div>
+        <div class="rules-row"><span><b>Максимум за матч</b></span><span><b>4</b></span></div>
       </div>
     </details>
 
@@ -181,14 +180,6 @@
             <input type="number" class="fd-id-input" min="1" inputmode="numeric" placeholder="например 1208021">
           </label>
         </div>
-        <div class="time-row">
-          <span class="time-label">Как завершился матч</span>
-          <div class="toggle-group" data-role="actual-time" role="group" aria-label="Как завершился матч по факту">
-            <button type="button" class="toggle-btn" data-value="reg">Осн. время</button>
-            <button type="button" class="toggle-btn" data-value="et">Доп. время</button>
-            <button type="button" class="toggle-btn" data-value="pen">Пенальти</button>
-          </div>
-        </div>
         <div class="players-grid">
             <div class="player-row" data-player="egor">
               <span class="player-tag player-tag--egor">Егор Б.</span>
@@ -196,11 +187,6 @@
                 <input type="number" class="pred-home" min="0" max="30" inputmode="numeric" aria-label="Прогноз Егор Б., голы хозяев">
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Егор Б., голы гостей">
-              </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Егор Б., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
               </div>
               <span class="points-badge badge-pending">–</span>
             </div>
@@ -211,11 +197,6 @@
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Иван Г., голы гостей">
               </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Иван Г., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
-              </div>
               <span class="points-badge badge-pending">–</span>
             </div>
             <div class="player-row" data-player="sasha_r">
@@ -225,11 +206,6 @@
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Александр Р., голы гостей">
               </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Александр Р., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
-              </div>
               <span class="points-badge badge-pending">–</span>
             </div>
             <div class="player-row" data-player="sasha_t">
@@ -238,11 +214,6 @@
                 <input type="number" class="pred-home" min="0" max="30" inputmode="numeric" aria-label="Прогноз Александр Т., голы хозяев">
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Александр Т., голы гостей">
-              </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Александр Т., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
               </div>
               <span class="points-badge badge-pending">–</span>
             </div>
@@ -350,14 +321,6 @@
             <input type="number" class="fd-id-input" min="1" inputmode="numeric" placeholder="например 1208021">
           </label>
         </div>
-        <div class="time-row">
-          <span class="time-label">Как завершился матч</span>
-          <div class="toggle-group" data-role="actual-time" role="group" aria-label="Как завершился матч по факту">
-            <button type="button" class="toggle-btn" data-value="reg">Осн. время</button>
-            <button type="button" class="toggle-btn" data-value="et">Доп. время</button>
-            <button type="button" class="toggle-btn" data-value="pen">Пенальти</button>
-          </div>
-        </div>
         <div class="players-grid">
             <div class="player-row" data-player="egor">
               <span class="player-tag player-tag--egor">Егор Б.</span>
@@ -365,11 +328,6 @@
                 <input type="number" class="pred-home" min="0" max="30" inputmode="numeric" aria-label="Прогноз Егор Б., голы хозяев">
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Егор Б., голы гостей">
-              </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Егор Б., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
               </div>
               <span class="points-badge badge-pending">–</span>
             </div>
@@ -380,11 +338,6 @@
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Иван Г., голы гостей">
               </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Иван Г., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
-              </div>
               <span class="points-badge badge-pending">–</span>
             </div>
             <div class="player-row" data-player="sasha_r">
@@ -394,11 +347,6 @@
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Александр Р., голы гостей">
               </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Александр Р., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
-              </div>
               <span class="points-badge badge-pending">–</span>
             </div>
             <div class="player-row" data-player="sasha_t">
@@ -407,11 +355,6 @@
                 <input type="number" class="pred-home" min="0" max="30" inputmode="numeric" aria-label="Прогноз Александр Т., голы хозяев">
                 <span class="score-sep">:</span>
                 <input type="number" class="pred-away" min="0" max="30" inputmode="numeric" aria-label="Прогноз Александр Т., голы гостей">
-              </div>
-              <div class="toggle-group toggle-group--sm" data-role="pred-time" role="group" aria-label="Как, по мнению Александр Т., завершится матч">
-                <button type="button" class="toggle-btn" data-value="reg">ОВ</button>
-                <button type="button" class="toggle-btn" data-value="et">ДВ</button>
-                <button type="button" class="toggle-btn" data-value="pen">Пен.</button>
               </div>
               <span class="points-badge badge-pending">–</span>
             </div>
