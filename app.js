@@ -195,6 +195,25 @@
     return grid ? grid.querySelector('.match-card[data-match-id="' + matchId + '"]') : null;
   }
 
+  // Newest match first, with the "add match" tile leading the grid so a
+  // freshly added card shows up right next to it. Firebase push keys (and
+  // local-mode ids) sort chronologically as plain strings; the static
+  // seed-* cards are the oldest of all, so they always go last.
+  function sortGrid(stage){
+    var grid = gridFor(stage);
+    if(!grid) return;
+    var tile = grid.querySelector(".add-tile");
+    var cards = Array.prototype.slice.call(grid.querySelectorAll(".match-card"));
+    cards.sort(function(a, b){
+      var ka = a.dataset.matchId || "", kb = b.dataset.matchId || "";
+      var sa = ka.indexOf("seed-") === 0, sb = kb.indexOf("seed-") === 0;
+      if(sa !== sb) return sa ? 1 : -1;
+      return ka < kb ? 1 : (ka > kb ? -1 : 0);
+    });
+    if(tile) grid.appendChild(tile);
+    cards.forEach(function(card){ grid.appendChild(card); });
+  }
+
   // ---------- legacy local-only mode (no Firebase configured) ----------
 
   function collectMatchLocal(card, stage){
@@ -254,6 +273,7 @@
           if(ids.indexOf(card.dataset.matchId) === -1) card.remove();
         });
       }
+      sortGrid(stage);
     });
   }
 
@@ -404,6 +424,7 @@
         applyPermissionsToCard(card);
         recompute();
       }
+      sortGrid(stage);
     });
 
     ref.on("child_changed", function(snap){
@@ -551,6 +572,7 @@
     var grid = gridFor(stage);
     var tile = grid.querySelector(".add-tile");
     grid.insertBefore(buildCard(stage, nextLocalId(stage), {}), tile);
+    sortGrid(stage);
     recompute();
     saveLocal();
   }
