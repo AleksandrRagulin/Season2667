@@ -105,10 +105,35 @@
           Ключ лиги: <code id="league-key-value"></code>
           <button type="button" class="league-copy" id="league-key-copy">Скопировать</button>
         </span>
+        <button type="button" class="dyn-toggle" id="dyn-toggle" aria-expanded="false" aria-controls="dyn-panel">Динамика</button>
         <span class="sync-pill sync-off" id="sync-status">Подключение…</span>
       </span>
     </div>
     <div class="lb-grid" id="lb-grid"></div>
+
+    <div class="dyn-panel" id="dyn-panel" hidden>
+      <div class="dyn-controls">
+        <div class="seg" role="group" aria-label="Турнир">
+          <button type="button" class="seg-btn is-active" data-dyn-stage="league" aria-pressed="true">Лиги</button>
+          <button type="button" class="seg-btn" data-dyn-stage="europe" aria-pressed="false">Еврокубки</button>
+        </div>
+        <div class="seg" role="group" aria-label="Режим">
+          <button type="button" class="seg-btn is-active" data-dyn-mode="round" aria-pressed="true">За тур</button>
+          <button type="button" class="seg-btn" data-dyn-mode="total" aria-pressed="false">Нарастающим итогом</button>
+        </div>
+      </div>
+      <p class="dyn-title" id="dyn-title"></p>
+      <div class="dyn-legend" id="dyn-legend"></div>
+      <div class="dyn-chart" id="dyn-chart">
+        <div class="dyn-tooltip" id="dyn-tooltip" role="status" hidden></div>
+      </div>
+      <p class="empty-note" id="dyn-empty" hidden>Пока нет сыгранных матчей — графику не из чего строиться.</p>
+      <p class="dyn-note" id="dyn-note" hidden></p>
+      <details class="dyn-table-wrap" id="dyn-table-wrap">
+        <summary>Таблица</summary>
+        <div class="dyn-table-scroll"><table class="dyn-table" id="dyn-table"></table></div>
+      </details>
+    </div>
   </section>
 
   <div class="stage is-active" data-stage-panel="league">

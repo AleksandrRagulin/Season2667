@@ -12,9 +12,10 @@
   var LAST_LEAGUE_STORAGE = "season2627.lastLeague";
   var STAGES = ["league", "europe"];
   var STAGE_LABEL = { league: "Лиги", europe: "Еврокубки" };
-  // The original four keep their hand-picked colours; everyone else gets a
-  // hue derived from their username (see applyPlayerColor).
-  var FIXED_COLORS = { egor: true, ivan: true, sasha_r: true, sasha_t: true };
+  // Player colours come from a fixed, colour-blind-validated 8-slot palette
+  // (--series-1..8 in styles.css), assigned in league join order — so a
+  // player keeps their colour as others join. Past 8 there's no safe hue left.
+  var SERIES_SLOTS = 8;
 
   function emailFor(username){ return username + "@" + EMAIL_DOMAIN; }
   function usernameFromEmail(email){
@@ -149,18 +150,12 @@
 
   function labelFor(username){ return names[username] || username; }
 
-  function hueFor(username){
-    var h = 0;
-    for(var i = 0; i < username.length; i++) h = (h * 31 + username.charCodeAt(i)) % 360;
-    return h;
+  function colorVar(username){
+    var i = memberList().indexOf(username);
+    return (i >= 0 && i < SERIES_SLOTS) ? "var(--series-" + (i + 1) + ")" : "var(--ink-faint)";
   }
   function applyPlayerColor(el, username){
-    if(FIXED_COLORS[username]){
-      el.classList.add("player-tag--" + username);
-    } else {
-      el.classList.add("player-tag--auto");
-      el.style.setProperty("--h", String(hueFor(username)));
-    }
+    el.style.setProperty("--dot", colorVar(username));
   }
 
   // ---------- screens ----------
@@ -293,6 +288,7 @@
       grid.appendChild(row); // (re)appending keeps rows in member order
       var label = labelFor(username);
       row.querySelector(".player-tag").textContent = label;
+      applyPlayerColor(row.querySelector(".player-tag"), username);
       row.querySelector(".pred-home").setAttribute("aria-label", "Прогноз " + label + ", голы хозяев");
       row.querySelector(".pred-away").setAttribute("aria-label", "Прогноз " + label + ", голы гостей");
     });
@@ -432,6 +428,7 @@
 
     members.forEach(function(u){ totals[u] = leagueTotals[u] + europeTotals[u]; });
     renderLeaderboard(members, totals, leagueTotals, europeTotals);
+    scheduleDynamics();
   }
 
   function renderLeaderboard(members, totals, leagueTotals, europeTotals){
@@ -468,6 +465,288 @@
 
       cardEl.appendChild(rankEl); cardEl.appendChild(nameEl); cardEl.appendChild(totalEl); cardEl.appendChild(split);
       grid.appendChild(cardEl);
+    });
+  }
+
+  // ---------- dynamics chart ----------
+  // Points per round (grouped columns) or running total after each round
+  // (lines), for league or eurocup matches separately — their round numbers
+  // are independent, so they never share an axis. Drawn as plain SVG; every
+  // value is also in the table under the chart.
+
+  var dyn = { stage: "league", mode: "round", frame: 0 };
+  var SVG_NS = "http://www.w3.org/2000/svg";
+
+  function svg(tag, attrs, parent){
+    var node = document.createElementNS(SVG_NS, tag);
+    Object.keys(attrs || {}).forEach(function(k){ node.setAttribute(k, attrs[k]); });
+    if(parent) parent.appendChild(node);
+    return node;
+  }
+
+  // Rounds that have at least one finished match, with each member's points
+  // per round and running total. Read from the rendered cards, the same
+  // source the leaderboard totals use, so the two always agree.
+  function computeDynamics(stage){
+    var members = memberList();
+    var byRound = {};
+    panelFor(stage).querySelectorAll(".match-card").forEach(function(card){
+      var aH = num(card.querySelector(".actual-home"));
+      var aA = num(card.querySelector(".actual-away"));
+      if(aH === null || aA === null) return;
+      var r = cardRound(card);
+      if(!byRound[r]){ byRound[r] = {}; members.forEach(function(u){ byRound[r][u] = 0; }); }
+      card.querySelectorAll(".player-row").forEach(function(row){
+        var u = row.dataset.player;
+        var pts = leaguePoints(aH, aA, num(row.querySelector(".pred-home")), num(row.querySelector(".pred-away")));
+        if(pts !== null && u in byRound[r]) byRound[r][u] += pts;
+      });
+    });
+    var rounds = Object.keys(byRound).map(Number).sort(function(a, b){ return a - b; });
+    var perRound = {}, total = {};
+    members.forEach(function(u){
+      var run = 0;
+      perRound[u] = rounds.map(function(r){ return byRound[r][u]; });
+      total[u] = perRound[u].map(function(v){ run += v; return run; });
+    });
+    return { members: members, rounds: rounds, perRound: perRound, total: total };
+  }
+
+  function niceTicks(max){
+    if(max <= 0) return [0, 1];
+    var raw = max / 4;
+    var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var step = [1, 2, 5, 10].map(function(m){ return m * mag; }).filter(function(s){ return s >= raw; })[0];
+    step = Math.max(1, Math.round(step));
+    var ticks = [];
+    for(var v = 0; v < max + step; v += step) ticks.push(v);
+    return ticks;
+  }
+
+  function scheduleDynamics(){
+    if(el("dyn-panel").hidden) return;
+    cancelAnimationFrame(dyn.frame);
+    dyn.frame = requestAnimationFrame(renderDynamics);
+  }
+
+  function renderDynamics(){
+    var panel = el("dyn-panel");
+    if(panel.hidden) return;
+    var data = computeDynamics(dyn.stage);
+    var isTotal = dyn.mode === "total";
+    var values = isTotal ? data.total : data.perRound;
+    var shown = data.members.slice(0, SERIES_SLOTS);
+
+    el("dyn-title").textContent = (isTotal ? "Сумма очков после каждого тура" : "Очки за тур") + " · " + STAGE_LABEL[dyn.stage];
+    var note = el("dyn-note");
+    note.hidden = data.members.length <= SERIES_SLOTS;
+    note.textContent = "На графике первые " + SERIES_SLOTS + " участников лиги — остальные есть в таблице.";
+
+    // legend: always present for 2+ series, keyed by the mark's own shape
+    var legend = el("dyn-legend");
+    legend.textContent = "";
+    legend.hidden = shown.length < 2 || !data.rounds.length;
+    shown.forEach(function(u){
+      var item = document.createElement("span");
+      item.className = "dyn-legend-item";
+      var key = document.createElement("span");
+      key.className = "dyn-key " + (isTotal ? "dyn-key--line" : "dyn-key--rect");
+      key.style.setProperty("--dot", colorVar(u));
+      item.appendChild(key);
+      item.appendChild(document.createTextNode(labelFor(u)));
+      legend.appendChild(item);
+    });
+
+    var chart = el("dyn-chart");
+    var tooltip = el("dyn-tooltip");
+    tooltip.hidden = true;
+    chart.querySelectorAll("svg").forEach(function(s){ s.remove(); });
+    el("dyn-empty").hidden = data.rounds.length > 0;
+    chart.hidden = !data.rounds.length;
+    renderDynamicsTable(data, values, isTotal);
+    if(!data.rounds.length) return;
+
+    var width = Math.max(280, chart.clientWidth || 600);
+    var height = 260;
+    var m = { top: 14, right: isTotal ? 104 : 12, bottom: 30, left: 36 };
+    var plotW = width - m.left - m.right, plotH = height - m.top - m.bottom;
+    var max = 0;
+    shown.forEach(function(u){ values[u].forEach(function(v){ if(v > max) max = v; }); });
+    var ticks = niceTicks(max);
+    var yMax = ticks[ticks.length - 1];
+    var y = function(v){ return m.top + plotH - (v / yMax) * plotH; };
+    var n = data.rounds.length;
+    var band = plotW / n;
+    var xc = function(i){ return m.left + band * (i + 0.5); };
+
+    var root = svg("svg", { width: width, height: height, viewBox: "0 0 " + width + " " + height, role: "img",
+      "aria-label": el("dyn-title").textContent + ". Значения — в таблице ниже." }, chart);
+
+    // recessive solid hairline grid + clean tick labels
+    ticks.forEach(function(t){
+      svg("line", { x1: m.left, x2: m.left + plotW, y1: y(t), y2: y(t), class: t === 0 ? "dyn-axis" : "dyn-grid" }, root);
+      var lbl = svg("text", { x: m.left - 8, y: y(t) + 4, "text-anchor": "end", class: "dyn-tick" }, root);
+      lbl.textContent = String(t);
+    });
+    var every = Math.ceil(n / Math.max(1, Math.floor(plotW / 56)));
+    data.rounds.forEach(function(r, i){
+      if(i % every !== 0 && i !== n - 1) return;
+      var lbl = svg("text", { x: xc(i), y: height - 10, "text-anchor": "middle", class: "dyn-tick" }, root);
+      lbl.textContent = "Тур " + r;
+    });
+
+    var hoverLayer = svg("g", {}, root);
+    var marks = svg("g", {}, root);
+
+    if(!isTotal){
+      // grouped columns: <= 24px thick, 2px surface gap, 4px rounded top
+      var gap = 2;
+      var barW = Math.min(24, (band * 0.8 - gap * (shown.length - 1)) / shown.length);
+      var groupW = barW * shown.length + gap * (shown.length - 1);
+      data.rounds.forEach(function(r, i){
+        var x0 = xc(i) - groupW / 2;
+        shown.forEach(function(u, k){
+          var v = values[u][i];
+          if(!v) return;
+          var x = x0 + k * (barW + gap), top = y(v), base = y(0);
+          var rad = Math.min(4, barW / 2, base - top);
+          svg("path", { class: "dyn-bar", style: "fill:" + colorVar(u),
+            d: "M" + x + "," + base + "V" + (top + rad) + "Q" + x + "," + top + " " + (x + rad) + "," + top +
+               "H" + (x + barW - rad) + "Q" + (x + barW) + "," + top + " " + (x + barW) + "," + (top + rad) + "V" + base + "Z" }, marks);
+        });
+      });
+    } else {
+      // lines: 2px, round joins, end-dot with a 2px surface ring
+      shown.forEach(function(u){
+        var pts = values[u].map(function(v, i){ return xc(i) + "," + y(v); }).join(" ");
+        svg("polyline", { points: pts, class: "dyn-line", style: "stroke:" + colorVar(u) }, marks);
+        var last = values[u].length - 1;
+        svg("circle", { cx: xc(last), cy: y(values[u][last]), r: 4, class: "dyn-dot", style: "fill:" + colorVar(u) }, marks);
+      });
+      // direct end labels only when they don't collide; legend covers the rest
+      var ends = shown.map(function(u){ return { u: u, y: y(values[u][n - 1]) }; }).sort(function(a, b){ return a.y - b.y; });
+      var clear = ends.every(function(e, i){ return i === 0 || e.y - ends[i - 1].y >= 14; });
+      if(clear){
+        ends.forEach(function(e){
+          var t = svg("text", { x: xc(n - 1) + 10, y: e.y + 4, class: "dyn-end" }, root);
+          var name = labelFor(e.u);
+          t.textContent = (name.length > 12 ? name.slice(0, 11) + "…" : name) + " " + values[e.u][n - 1];
+        });
+      }
+    }
+
+    // hover / focus: one hit band per round, wider than any mark
+    var cross = svg("line", { y1: m.top, y2: m.top + plotH, class: "dyn-cross", visibility: "hidden" }, hoverLayer);
+    var wash = svg("rect", { y: m.top, height: plotH, width: band, class: "dyn-wash", visibility: "hidden" }, hoverLayer);
+    var focusDots = svg("g", {}, root);
+
+    function show(i){
+      if(isTotal){
+        cross.setAttribute("x1", xc(i)); cross.setAttribute("x2", xc(i)); cross.setAttribute("visibility", "visible");
+        focusDots.textContent = "";
+        shown.forEach(function(u){ svg("circle", { cx: xc(i), cy: y(values[u][i]), r: 4, class: "dyn-dot", style: "fill:" + colorVar(u) }, focusDots); });
+      } else {
+        wash.setAttribute("x", m.left + band * i); wash.setAttribute("visibility", "visible");
+      }
+      tooltip.textContent = "";
+      var head = document.createElement("div");
+      head.className = "dyn-tip-head";
+      head.textContent = "Тур " + data.rounds[i] + (isTotal ? " · сумма" : "");
+      tooltip.appendChild(head);
+      data.members.slice().sort(function(a, b){ return values[b][i] - values[a][i]; }).forEach(function(u){
+        var row = document.createElement("div");
+        row.className = "dyn-tip-row";
+        var key = document.createElement("span");
+        key.className = "dyn-key dyn-key--line";
+        key.style.setProperty("--dot", colorVar(u));
+        var val = document.createElement("b");
+        val.textContent = String(values[u][i]);
+        var name = document.createElement("span");
+        name.textContent = labelFor(u);
+        row.appendChild(key); row.appendChild(val); row.appendChild(name);
+        tooltip.appendChild(row);
+      });
+      tooltip.hidden = false;
+      var tipW = tooltip.offsetWidth || 160;
+      var left = xc(i) + 14;
+      if(left + tipW > width) left = xc(i) - 14 - tipW;
+      tooltip.style.left = Math.max(0, left) + "px";
+      tooltip.style.top = m.top + "px";
+    }
+    function hide(){
+      cross.setAttribute("visibility", "hidden");
+      wash.setAttribute("visibility", "hidden");
+      focusDots.textContent = "";
+      tooltip.hidden = true;
+    }
+    data.rounds.forEach(function(r, i){
+      var hit = svg("rect", { x: m.left + band * i, y: m.top, width: band, height: plotH, class: "dyn-hit", tabindex: "0",
+        "aria-label": "Тур " + r }, root);
+      hit.addEventListener("pointerenter", function(){ show(i); });
+      hit.addEventListener("focus", function(){ show(i); });
+      hit.addEventListener("pointerleave", hide);
+      hit.addEventListener("blur", hide);
+    });
+  }
+
+  function renderDynamicsTable(data, values, isTotal){
+    var table = el("dyn-table");
+    table.textContent = "";
+    if(!data.rounds.length){ el("dyn-table-wrap").hidden = true; return; }
+    el("dyn-table-wrap").hidden = false;
+    var thead = document.createElement("thead");
+    var hr = document.createElement("tr");
+    var corner = document.createElement("th");
+    corner.textContent = isTotal ? "После тура" : "Тур";
+    hr.appendChild(corner);
+    data.members.forEach(function(u){
+      var th = document.createElement("th");
+      th.textContent = labelFor(u);
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    data.rounds.forEach(function(r, i){
+      var tr = document.createElement("tr");
+      var th = document.createElement("th");
+      th.textContent = String(r);
+      tr.appendChild(th);
+      data.members.forEach(function(u){
+        var td = document.createElement("td");
+        td.textContent = String(values[u][i]);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  }
+
+  function setupDynamicsUI(){
+    var toggle = el("dyn-toggle");
+    toggle.addEventListener("click", function(){
+      var panel = el("dyn-panel");
+      panel.hidden = !panel.hidden;
+      toggle.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+      toggle.classList.toggle("is-active", !panel.hidden);
+      scheduleDynamics();
+    });
+    document.querySelectorAll("[data-dyn-stage], [data-dyn-mode]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var attr = btn.hasAttribute("data-dyn-stage") ? "data-dyn-stage" : "data-dyn-mode";
+        if(attr === "data-dyn-stage") dyn.stage = btn.getAttribute(attr); else dyn.mode = btn.getAttribute(attr);
+        document.querySelectorAll("[" + attr + "]").forEach(function(b){
+          var on = b === btn;
+          b.classList.toggle("is-active", on);
+          b.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        scheduleDynamics();
+      });
+    });
+    var lastWidth = 0;
+    window.addEventListener("resize", function(){
+      var w = el("dyn-chart").clientWidth;
+      if(w !== lastWidth){ lastWidth = w; scheduleDynamics(); }
     });
   }
 
@@ -1006,6 +1285,7 @@
   db = firebase.database();
   setupAuthUI();
   setupLeagueUI();
+  setupDynamicsUI();
   firebase.auth().onAuthStateChanged(function(user){
     if(user) onSignedIn(user); else onSignedOut();
   });
