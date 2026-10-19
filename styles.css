@@ -22,6 +22,7 @@
     --p-ivan:#4F5F92;
     --p-sasha_r:#7B4C80;
     --p-sasha_t:#7A7328;
+    --dot-l:42%;
     --shadow: 0 1px 2px rgba(20,35,25,.06), 0 6px 20px -8px rgba(20,35,25,.18);
     --font-display: "Bebas Neue", "Arial Narrow", sans-serif;
     --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
@@ -52,6 +53,7 @@
       --p-ivan:#93A3D9;
       --p-sasha_r:#C495C9;
       --p-sasha_t:#C7BF66;
+      --dot-l:68%;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -8px rgba(0,0,0,.5);
     }
   }
@@ -79,8 +81,12 @@
     --p-ivan:#93A3D9;
     --p-sasha_r:#C495C9;
     --p-sasha_t:#C7BF66;
+    --dot-l:68%;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -8px rgba(0,0,0,.5);
   }
+
+  /* Author display rules (flex/grid) would otherwise beat the UA [hidden] rule. */
+  [hidden]{ display:none !important; }
 
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -177,6 +183,22 @@
     cursor:pointer;
   }
   .session-logout:hover{ background:rgba(255,255,255,.12); }
+  .session-bar{ flex-wrap:wrap; }
+  .session-actions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .league-switch{ display:flex; align-items:center; gap:6px; }
+  .league-switch-label{ font-size:.74rem; opacity:.85; }
+  .league-switch select{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:.78rem;
+    padding:4px 8px;
+    border-radius:999px;
+    border:1px solid rgba(243,251,244,.35);
+    background:rgba(255,255,255,.12);
+    color:var(--accent-ink);
+    max-width:14em;
+  }
+  .league-switch select option{ color:var(--ink); background:var(--surface); }
 
   /* ---------- auth screen ---------- */
   .auth-screen{
@@ -277,6 +299,81 @@
     font-size:.8rem;
     color:var(--miss);
   }
+  .auth-modes{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:4px;
+    padding:4px;
+    border-radius:12px;
+    background:var(--surface-2);
+  }
+  .auth-mode{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:.85rem;
+    padding:8px;
+    border-radius:9px;
+    border:none;
+    background:transparent;
+    color:var(--ink-muted);
+    cursor:pointer;
+  }
+  .auth-mode.is-active{ background:var(--surface); color:var(--ink); box-shadow:var(--shadow); }
+  .auth-register-only{ display:flex; flex-direction:column; gap:10px; }
+  .auth-text{ font-family:var(--font-body); }
+
+  /* ---------- league screen ---------- */
+  .league-form{ display:flex; flex-direction:column; gap:6px; }
+  .league-row{ display:flex; gap:8px; }
+  .league-row .auth-password{ flex:1; min-width:0; }
+  .league-btn{ margin-top:0; padding:9px 16px; white-space:nowrap; }
+  .league-key-input{ text-transform:uppercase; letter-spacing:.12em; }
+  .league-divider{
+    display:flex; align-items:center; gap:10px;
+    color:var(--ink-faint); font-size:.76rem;
+    margin:6px 0;
+  }
+  .league-divider::before, .league-divider::after{ content:""; flex:1; border-top:1px solid var(--line); }
+  .league-created{ display:flex; flex-direction:column; gap:8px; }
+  .league-created-title{ margin:0; font-weight:700; }
+  .league-key-box{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 14px;
+    border-radius:12px;
+    border:1.5px dashed var(--gold);
+    background:var(--gold-soft);
+  }
+  .league-key-box code{
+    font-family:var(--font-mono);
+    font-weight:600;
+    font-size:1.5rem;
+    letter-spacing:.14em;
+    color:var(--ink);
+  }
+  .league-copy{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:.74rem;
+    padding:5px 10px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .league-copy:hover{ border-color:var(--accent); color:var(--accent); }
+  .league-back{
+    align-self:flex-start;
+    margin-top:4px;
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:.82rem;
+    border:none;
+    background:none;
+    color:var(--accent);
+    cursor:pointer;
+    padding:4px 0;
+  }
 
   /* ---------- locked prediction fields ---------- */
   .player-row.is-locked{ opacity:.55; }
@@ -310,6 +407,21 @@
     letter-spacing:.02em;
   }
   .lb-note{ color:var(--ink-muted); font-size:.82rem; }
+  .lb-head-side{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .league-key-chip{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:.76rem;
+    color:var(--ink-muted);
+  }
+  .league-key-chip code{
+    font-family:var(--font-mono);
+    font-weight:600;
+    letter-spacing:.1em;
+    color:var(--ink);
+    background:var(--gold-soft);
+    padding:2px 7px;
+    border-radius:6px;
+  }
   .sync-pill{
     display:inline-flex;
     align-items:center;
@@ -636,9 +748,6 @@
     border-radius:10px;
     background:var(--surface-2);
   }
-  .match-card[data-stage="europe"] .player-row{
-    grid-template-columns:auto 1fr auto auto;
-  }
   .player-tag{
     font-size:.76rem;
     font-weight:600;
@@ -659,6 +768,7 @@
   .player-tag--ivan{ --dot:var(--p-ivan); }
   .player-tag--sasha_r{ --dot:var(--p-sasha_r); }
   .player-tag--sasha_t{ --dot:var(--p-sasha_t); }
+  .player-tag--auto{ --dot:hsl(var(--h, 150) 42% var(--dot-l)); }
 
   .points-badge{
     font-family:var(--font-mono);

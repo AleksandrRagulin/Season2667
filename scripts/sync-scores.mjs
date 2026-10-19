@@ -7,8 +7,9 @@
 //   FIREBASE_DATABASE_URL     — e.g. https://<project>-default-rtdb.<region>.firebasedatabase.app
 //   API_FOOTBALL_KEY          — key from dashboard.api-football.com
 //
-// A match is "tracked" once someone (only Александр Р. can, via the site)
-// sets its "ID матча в API-Football" field.
+// A match is "tracked" once its league's creator (the only one who can, via
+// the site) sets its "ID матча в API-Football" field. Matches live under
+// leagues/{leagueId}/matches/{stage}/{matchId}.
 //
 // The free API-Football plan has no batch (?ids=) endpoint — every fixture
 // costs its own request, against a 100/day quota — so this script is careful
@@ -88,14 +89,20 @@ async function main() {
   const now = Date.now();
 
   let requestsSpent = 0;
+  // Several leagues may track the same real fixture — fetch it once per run
+  // and fan the result out, so each extra league costs no API quota.
+  const fetched = new Map(); // fdId -> fixture (or null on failure)
 
+  const leaguesSnap = await db.ref("leagues").get();
+  const leagues = leaguesSnap.val() || {};
+
+  for (const [leagueId, league] of Object.entries(leagues))
   for (const stage of STAGES) {
-    const snap = await db.ref(`predictions/${stage}`).get();
-    const matches = snap.val() || {};
+    const matches = (league && league.matches && league.matches[stage]) || {};
 
     for (const [matchId, m] of Object.entries(matches)) {
       if (!m || !m.fdId || m.fdDone) continue;
-      const path = `${stage}/${matchId}`;
+      const path = `${leagueId}/matches/${stage}/${matchId}`;
 
       const learnNames = !m.fdKickoff; // first time we see this fixture
 
@@ -120,12 +127,16 @@ async function main() {
       // team names) even if kickoff turns out to be far in the future
       // (only happens once per match).
 
-      const fx = await fetchFixture(m.fdId, apiKey);
-      requestsSpent += 1;
+      const fdId = String(m.fdId);
+      if (!fetched.has(fdId)) {
+        fetched.set(fdId, await fetchFixture(fdId, apiKey));
+        requestsSpent += 1;
+      }
+      const fx = fetched.get(fdId);
       if (!fx) continue;
 
       const patch = fixtureToPatch(fx, learnNames);
-      await db.ref(`predictions/${path}`).update(patch);
+      await db.ref(`leagues/${path}`).update(patch);
       console.log(`${path}: updated`, patch);
     }
   }

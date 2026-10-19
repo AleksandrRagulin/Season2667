@@ -1,0 +1,55 @@
+{
+  "rules": {
+    "users": {
+      "$u": {
+        ".write": "auth != null && auth.token.email == $u + '@season2627.invalid' && $u.matches(/^[a-z0-9_]{3,20}$/)",
+        "name": {
+          ".read": "auth != null",
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+        },
+        "leagues": {
+          ".read": "auth != null && auth.token.email == $u + '@season2627.invalid'",
+          "$lid": { ".validate": "newData.val() == true" }
+        },
+        "$other": { ".validate": false }
+      }
+    },
+    "leagues": {
+      "$lid": {
+        ".read": "auth != null && data.child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists()",
+        ".write": "auth != null && !data.exists() && $lid.matches(/^[A-HJ-NP-Z2-9]{8}$/) && newData.child('owner').val() + '@season2627.invalid' == auth.token.email && newData.child('members').child(newData.child('owner').val()).exists() && !newData.child('matches').exists()",
+        "name": {
+          ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email",
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+        },
+        "owner": { ".validate": "newData.isString() && (!data.exists() || data.val() == newData.val())" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "members": {
+          "$u": {
+            ".write": "auth != null && auth.token.email == $u + '@season2627.invalid' && !data.exists() && root.child('leagues').child($lid).child('owner').exists()",
+            ".validate": "newData.isNumber() && (root.child('leagues').child($lid).child('owner').exists() || newData.parent().parent().child('owner').val() == $u)"
+          }
+        },
+        "matches": {
+          "$stage": {
+            ".validate": "$stage == 'league' || $stage == 'europe'",
+            "$matchId": {
+              ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email && (!data.exists() || !newData.exists())",
+              "home": { ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists()" },
+              "away": { ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists()" },
+              "aH":   { ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists()" },
+              "aA":   { ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists()" },
+              "fdId":   { ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email" },
+              "fdDone": { ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email" },
+              "players": {
+                "$player": {
+                  ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists() && (auth.token.email == $player + '@season2627.invalid' || root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email)"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
