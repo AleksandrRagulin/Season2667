@@ -474,15 +474,16 @@
   .dyn-toggle{
     font-family:var(--font-body);
     font-weight:600;
-    font-size:.78rem;
-    padding:5px 12px;
+    font-size:.85rem;
+    padding:5px 13px;
     border-radius:999px;
-    border:1.5px solid var(--accent);
-    background:transparent;
-    color:var(--accent);
+    border:1.5px solid var(--miss);
+    background:var(--miss);
+    color:var(--surface);
     cursor:pointer;
   }
-  .dyn-toggle:hover, .dyn-toggle.is-active{ background:var(--accent); color:var(--accent-ink); }
+  .dyn-toggle:hover{ filter:brightness(1.08); }
+  .dyn-toggle.is-active{ background:transparent; color:var(--miss); }
   .dyn-panel{
     margin-top:18px;
     padding-top:16px;
