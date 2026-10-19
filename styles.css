@@ -935,6 +935,14 @@
     line-height:1;
   }
 
+  .app-version{
+    text-align:center;
+    color:var(--ink-faint);
+    font-family:var(--font-mono);
+    font-size:.72rem;
+    letter-spacing:.06em;
+    padding:0 20px 24px;
+  }
   footer.note{
     color:var(--ink-faint);
     font-size:.78rem;
