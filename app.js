@@ -122,6 +122,7 @@
   var names = {};                // username -> display name
   var nameWatched = {};          // username -> true once its name is being watched
   var matchCache = { league: {}, europe: {} }; // stage -> matchId -> last remote data
+  var rounds = { league: 0, europe: 0 };       // stage -> current round number
   var sessionListeners = [];     // live for the whole sign-in
   var leagueListeners = [];      // live while one league is on screen
   var leagueConnected = false;
@@ -193,32 +194,81 @@
 
   // ---------- match cards ----------
 
-  function gridFor(stage){
-    return document.querySelector('.card-grid[data-stage-grid="' + stage + '"]');
+  function panelFor(stage){
+    return document.querySelector('.stage[data-stage-panel="' + stage + '"]');
+  }
+
+  // Each stage has two grids: the current round, and every earlier round.
+  function gridFor(stage, view){
+    return document.querySelector('.card-grid[data-stage-grid="' + stage + '"][data-view="' + (view || "current") + '"]');
   }
 
   function cardFor(stage, matchId){
-    var grid = gridFor(stage);
-    return grid ? grid.querySelector('.match-card[data-match-id="' + matchId + '"]') : null;
+    return panelFor(stage).querySelector('.match-card[data-match-id="' + matchId + '"]');
   }
 
-  // Newest match first, with the "add match" tile leading the grid so a
-  // freshly added card shows up right next to it. Firebase push keys sort
-  // chronologically as plain strings; the old static seed-* cards are the
-  // oldest of all, so they always go last.
-  function sortGrid(stage){
-    var grid = gridFor(stage);
-    if(!grid) return;
-    var tile = grid.querySelector(".add-tile");
-    var cards = Array.prototype.slice.call(grid.querySelectorAll(".match-card"));
-    cards.sort(function(a, b){
-      var ka = a.dataset.matchId || "", kb = b.dataset.matchId || "";
-      var sa = ka.indexOf("seed-") === 0, sb = kb.indexOf("seed-") === 0;
-      if(sa !== sb) return sa ? 1 : -1;
-      return ka < kb ? 1 : (ka > kb ? -1 : 0);
+  function cardRound(card){ return Number(card.dataset.round) || 0; }
+
+  // Newest first. Firebase push keys sort chronologically as plain strings;
+  // the old static seed-* cards are the oldest of all, so they always go last.
+  function newestFirst(a, b){
+    var ka = a.dataset.matchId || "", kb = b.dataset.matchId || "";
+    var sa = ka.indexOf("seed-") === 0, sb = kb.indexOf("seed-") === 0;
+    if(sa !== sb) return sa ? 1 : -1;
+    return ka < kb ? 1 : (ka > kb ? -1 : 0);
+  }
+
+  // Puts every card of a stage into the right grid: the current round's
+  // matches after the "add match" tile, and older rounds under the "past"
+  // view, grouped by round, latest round first.
+  function layoutStage(stage){
+    var panel = panelFor(stage);
+    var current = gridFor(stage, "current");
+    var past = gridFor(stage, "past");
+    var cur = rounds[stage];
+    var cards = Array.prototype.slice.call(panel.querySelectorAll(".match-card")).sort(newestFirst);
+
+    var tile = current.querySelector(".add-tile");
+    if(tile) current.appendChild(tile);
+    var pastCards = [];
+    cards.forEach(function(card){
+      if(cardRound(card) >= cur) current.appendChild(card); else pastCards.push(card);
     });
-    if(tile) grid.appendChild(tile);
-    cards.forEach(function(card){ grid.appendChild(card); });
+
+    past.querySelectorAll(".round-heading").forEach(function(h){ h.remove(); });
+    pastCards.sort(function(a, b){ return (cardRound(b) - cardRound(a)) || newestFirst(a, b); });
+    var lastRound = null;
+    pastCards.forEach(function(card){
+      var r = cardRound(card);
+      if(r !== lastRound){
+        var heading = document.createElement("h3");
+        heading.className = "round-heading";
+        heading.textContent = "Тур " + r;
+        past.appendChild(heading);
+        lastRound = r;
+      }
+      past.appendChild(card);
+    });
+
+    panel.querySelectorAll("[data-round-label]").forEach(function(l){ l.textContent = "Тур " + cur; });
+    panel.querySelector("[data-past-count]").textContent = String(pastCards.length);
+    updateStageView(stage);
+  }
+
+  function updateStageView(stage){
+    var panel = panelFor(stage);
+    var view = panel.dataset.view || "current";
+    panel.querySelectorAll(".subtab").forEach(function(b){
+      var on = b.dataset.view === view;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    var currentCount = gridFor(stage, "current").querySelectorAll(".match-card").length;
+    var pastCount = gridFor(stage, "past").querySelectorAll(".match-card").length;
+    gridFor(stage, "current").hidden = view !== "current";
+    gridFor(stage, "past").hidden = view !== "past";
+    panel.querySelector('[data-empty="current"]').hidden = view !== "current" || currentCount > 0 || isAdmin() || !leagueId;
+    panel.querySelector('[data-empty="past"]').hidden = view !== "past" || pastCount > 0 || !leagueId;
   }
 
   function buildPlayerRow(username){
@@ -252,7 +302,6 @@
     var card = el("tpl-match").content.firstElementChild.cloneNode(true);
     card.dataset.stage = stage;
     card.dataset.matchId = matchId;
-    card.querySelector(".match-eyebrow").textContent = STAGE_LABEL[stage];
     syncPlayerRows(card);
     return card;
   }
@@ -272,6 +321,10 @@
   // applyPermissionsToCard()/recompute(), not by whether its value refreshed.
   function applyDataToCard(card, data){
     data = data || {};
+    var round = Number(data.round) || 0;
+    card.dataset.round = String(round);
+    card.querySelector(".match-eyebrow").textContent = STAGE_LABEL[card.dataset.stage] + " · Тур " + round;
+
     var home = card.querySelector(".team-home");
     var away = card.querySelector(".team-away");
     if(document.activeElement !== home) home.textContent = data.home || "";
@@ -325,24 +378,26 @@
 
   function applyPermissions(){
     document.querySelectorAll(".match-card").forEach(applyPermissionsToCard);
-    document.querySelectorAll(".add-tile").forEach(function(btn){ btn.hidden = !isAdmin(); });
+    document.querySelectorAll(".add-tile, .round-add").forEach(function(btn){ btn.hidden = !isAdmin(); });
+    STAGES.forEach(updateStageView);
   }
 
   // Re-renders every card against the current member list and cached data —
   // used when someone joins the league or a display name changes.
   function refreshAllCards(){
     STAGES.forEach(function(stage){
-      gridFor(stage).querySelectorAll(".match-card").forEach(function(card){
+      panelFor(stage).querySelectorAll(".match-card").forEach(function(card){
         syncPlayerRows(card);
         applyDataToCard(card, matchCache[stage][card.dataset.matchId]);
       });
+      layoutStage(stage);
     });
     applyPermissions();
     recompute();
   }
 
   function clearCards(){
-    document.querySelectorAll(".match-card").forEach(function(card){ card.remove(); });
+    document.querySelectorAll(".match-card, .round-heading").forEach(function(node){ node.remove(); });
     matchCache = { league: {}, europe: {} };
   }
 
@@ -450,9 +505,28 @@
 
   function addMatch(stage){
     if(!db || !leagueId || !isAdmin()) return;
-    db.ref("leagues/" + leagueId + "/matches/" + stage).push().set({ home:"", away:"", aH:"", aA:"" }).catch(function(err){
+    var data = { home:"", away:"", aH:"", aA:"", round: rounds[stage] };
+    db.ref("leagues/" + leagueId + "/matches/" + stage).push().set(data).catch(function(err){
       console.warn("Firebase: не удалось добавить матч:", err);
       window.alert("Не удалось добавить матч: " + (err && err.message ? err.message : err));
+    });
+  }
+
+  // Starting the next round is all it takes to move the current round's
+  // matches to "past" — a card's view follows from its round number alone.
+  function addRound(stage){
+    if(!db || !leagueId || !isAdmin()) return;
+    var next = rounds[stage] + 1;
+    var count = gridFor(stage, "current").querySelectorAll(".match-card").length;
+    var question = "Начать тур " + next + " в разделе «" + STAGE_LABEL[stage] + "»?"
+      + (count ? "\nМатчи тура " + rounds[stage] + " (" + count + ") перейдут в прошедшие." : "");
+    if(!window.confirm(question)) return;
+    db.ref("leagues/" + leagueId + "/rounds/" + stage).set(next).then(function(){
+      panelFor(stage).dataset.view = "current";
+      updateStageView(stage);
+    }).catch(function(err){
+      console.warn("Firebase: не удалось добавить тур:", err);
+      window.alert("Не удалось добавить тур: " + (err && err.message ? err.message : err));
     });
   }
 
@@ -487,18 +561,16 @@
   }
 
   function watchStage(stage, ref){
-    var grid = gridFor(stage);
-
     listen(leagueListeners, ref, "child_added", function(snap){
       var matchId = snap.key;
       matchCache[stage][matchId] = snap.val();
       var card = cardFor(stage, matchId);
       if(!card){
         card = buildCard(stage, matchId);
-        grid.appendChild(card);
+        gridFor(stage, "current").appendChild(card);
       }
       applyDataToCard(card, snap.val());
-      sortGrid(stage);
+      layoutStage(stage);
       applyPermissionsToCard(card);
       recompute();
     });
@@ -507,7 +579,9 @@
       matchCache[stage][snap.key] = snap.val();
       var card = cardFor(stage, snap.key);
       if(!card) return;
+      var oldRound = card.dataset.round;
       applyDataToCard(card, snap.val());
+      if(card.dataset.round !== oldRound) layoutStage(stage);
       applyPermissionsToCard(card);
       recompute();
     });
@@ -516,6 +590,7 @@
       delete matchCache[stage][snap.key];
       var card = cardFor(stage, snap.key);
       if(card) card.remove();
+      layoutStage(stage);
       recompute();
     });
   }
@@ -525,6 +600,11 @@
     clearCards();
     leagueId = null;
     league = { name: "", owner: "", members: {} };
+    rounds = { league: 0, europe: 0 };
+    STAGES.forEach(function(stage){
+      panelFor(stage).dataset.view = "current";
+      layoutStage(stage);
+    });
     el("lb-grid").textContent = "";
   }
 
@@ -558,6 +638,13 @@
       league.owner = snap.val() || "";
       renderLeagueHeader();
       applyPermissions();
+    }, onDenied);
+    listen(leagueListeners, base.child("rounds"), "value", function(snap){
+      var v = snap.val() || {};
+      STAGES.forEach(function(stage){
+        rounds[stage] = Number(v[stage]) || 0;
+        layoutStage(stage);
+      });
     }, onDenied);
     listen(leagueListeners, base.child("members"), "value", function(snap){
       league.members = snap.val() || {};
@@ -621,7 +708,7 @@
   function createLeague(name, attempt){
     attempt = attempt || 1;
     var key = generateKey();
-    var data = { name: name, owner: me, createdAt: serverNow(), members: {} };
+    var data = { name: name, owner: me, createdAt: serverNow(), rounds: { league: 1, europe: 1 }, members: {} };
     data.members[me] = serverNow();
     return db.ref("leagues/" + key).set(data).then(function(){
       return db.ref("users/" + me + "/leagues/" + key).set(true);
@@ -839,6 +926,15 @@
   document.body.addEventListener("click", function(e){
     var addBtn = e.target.closest(".add-tile");
     if(addBtn){ addMatch(addBtn.dataset.addStage); return; }
+    var roundBtn = e.target.closest(".round-add");
+    if(roundBtn){ addRound(roundBtn.dataset.addRound); return; }
+    var subtab = e.target.closest(".subtab");
+    if(subtab){
+      var panel = subtab.closest(".stage");
+      panel.dataset.view = subtab.dataset.view;
+      updateStageView(panel.dataset.stagePanel);
+      return;
+    }
     var rmBtn = e.target.closest(".match-remove");
     if(rmBtn){
       var card = rmBtn.closest(".match-card");

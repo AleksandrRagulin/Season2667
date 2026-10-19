@@ -122,12 +122,23 @@
       </div>
     </details>
 
-    <div class="card-grid" data-stage-grid="league">
+    <div class="round-bar">
+      <div class="subtabs" role="tablist" aria-label="Туры">
+        <button type="button" class="subtab is-active" data-view="current" role="tab" aria-selected="true">Актуальный тур · <span data-round-label>Тур 0</span></button>
+        <button type="button" class="subtab" data-view="past" role="tab" aria-selected="false">Прошедшие матчи <span class="subtab-count" data-past-count>0</span></button>
+      </div>
+      <button type="button" class="round-add" data-add-round="league" hidden>+ Добавить тур</button>
+    </div>
+
+    <p class="empty-note" data-empty="current" hidden>В этом туре пока нет матчей.</p>
+    <div class="card-grid" data-stage-grid="league" data-view="current">
       <button type="button" class="add-tile" data-add-stage="league" hidden>
         <span class="add-tile-icon">+</span>
         <span>Добавить матч</span>
       </button>
     </div>
+    <p class="empty-note" data-empty="past" hidden>Прошедших матчей пока нет.</p>
+    <div class="card-grid" data-stage-grid="league" data-view="past" hidden></div>
   </div>
 
   <div class="stage" data-stage-panel="europe">
@@ -142,15 +153,26 @@
       </div>
     </details>
 
-    <div class="card-grid" data-stage-grid="europe">
+    <div class="round-bar">
+      <div class="subtabs" role="tablist" aria-label="Туры">
+        <button type="button" class="subtab is-active" data-view="current" role="tab" aria-selected="true">Актуальный тур · <span data-round-label>Тур 0</span></button>
+        <button type="button" class="subtab" data-view="past" role="tab" aria-selected="false">Прошедшие матчи <span class="subtab-count" data-past-count>0</span></button>
+      </div>
+      <button type="button" class="round-add" data-add-round="europe" hidden>+ Добавить тур</button>
+    </div>
+
+    <p class="empty-note" data-empty="current" hidden>В этом туре пока нет матчей.</p>
+    <div class="card-grid" data-stage-grid="europe" data-view="current">
       <button type="button" class="add-tile" data-add-stage="europe" hidden>
         <span class="add-tile-icon">+</span>
         <span>Добавить матч</span>
       </button>
     </div>
+    <p class="empty-note" data-empty="past" hidden>Прошедших матчей пока нет.</p>
+    <div class="card-grid" data-stage-grid="europe" data-view="past" hidden></div>
   </div>
 
-  <footer class="note">Добавлять и удалять матчи может только создатель лиги.</footer>
+  <footer class="note">Добавлять туры и матчи может только создатель лиги.</footer>
 </div>
 
 <template id="tpl-match">
