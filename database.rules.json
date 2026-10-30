@@ -47,6 +47,10 @@
               "aA":   { ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists()" },
               "fdId":   { ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email" },
               "fdDone": { ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email" },
+              "star": {
+                ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email",
+                ".validate": "newData.isBoolean()"
+              },
               "round": {
                 ".write": "auth != null && root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email",
                 ".validate": "newData.isNumber() && newData.val() >= 0"

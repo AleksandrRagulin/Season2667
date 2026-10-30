@@ -99,6 +99,15 @@
     return pts;
   }
 
+  // The round's central ("starred") match counts double — for every point
+  // source: the card badge, the leaderboard and the dynamics chart.
+  function isStarred(card){ return card.dataset.star === "1"; }
+  function pointsMultiplier(card){ return isStarred(card) ? 2 : 1; }
+  function rowPoints(card, aH, aA, row){
+    var pts = leaguePoints(aH, aA, num(row.querySelector(".pred-home")), num(row.querySelector(".pred-away")));
+    return pts === null ? null : pts * pointsMultiplier(card);
+  }
+
   function badgeClass(pts, maxExact){
     if(pts === null) return "badge-pending";
     if(pts === 0) return "badge-zero";
@@ -320,6 +329,11 @@
     var round = Number(data.round) || 0;
     card.dataset.round = String(round);
     card.querySelector(".match-eyebrow").textContent = STAGE_LABEL[card.dataset.stage] + " · Тур " + round;
+    card.dataset.star = data.star ? "1" : "";
+    card.classList.toggle("is-star", !!data.star);
+    var star = card.querySelector(".match-star");
+    star.textContent = data.star ? "★ ×2" : "☆";
+    star.setAttribute("aria-pressed", data.star ? "true" : "false");
 
     var home = card.querySelector(".team-home");
     var away = card.querySelector(".team-away");
@@ -370,6 +384,21 @@
     card.querySelector(".autosync-field").hidden = !admin;
     var started = isMatchStarted(card);
     card.querySelectorAll(".player-row").forEach(function(row){ applyRowLock(row, started); });
+    applyStarState(card, started);
+  }
+
+  // Everyone sees the star on the central match; only the league creator
+  // can set it, and only before kickoff — moving it later would rewrite
+  // points that are already known.
+  function applyStarState(card, started){
+    var admin = isAdmin();
+    var star = card.querySelector(".match-star");
+    star.hidden = !admin && !isStarred(card);
+    star.disabled = !admin || started;
+    star.classList.toggle("is-readonly", !admin);
+    star.title = isStarred(card)
+      ? "Центральный матч тура: очки ×2" + (admin && !started ? " — нажмите, чтобы снять" : "")
+      : (started ? "Матч начался — центральный матч уже не выбрать" : "Сделать центральным матчем тура (очки ×2)");
   }
 
   function applyPermissions(){
@@ -414,15 +443,16 @@
       statusEl.textContent = played ? "Матч сыгран" : "Ожидается";
       statusEl.classList.toggle("is-final", !!played);
       statusEl.classList.toggle("badge-pending", !played);
+      applyStarState(card, played);
 
       card.querySelectorAll(".player-row").forEach(function(row){
         var u = row.dataset.player;
-        var pts = leaguePoints(aH, aA, num(row.querySelector(".pred-home")), num(row.querySelector(".pred-away")));
+        var pts = rowPoints(card, aH, aA, row);
         applyRowLock(row, played);
         if(pts !== null && u in leagueTotals){
           if(stage === "league") leagueTotals[u] += pts; else europeTotals[u] += pts;
         }
-        setBadge(row.querySelector(".points-badge"), pts, 4);
+        setBadge(row.querySelector(".points-badge"), pts, 4 * pointsMultiplier(card));
       });
     });
 
@@ -498,7 +528,7 @@
       if(!byRound[r]){ byRound[r] = {}; members.forEach(function(u){ byRound[r][u] = 0; }); }
       card.querySelectorAll(".player-row").forEach(function(row){
         var u = row.dataset.player;
-        var pts = leaguePoints(aH, aA, num(row.querySelector(".pred-home")), num(row.querySelector(".pred-away")));
+        var pts = rowPoints(card, aH, aA, row);
         if(pts !== null && u in byRound[r]) byRound[r][u] += pts;
       });
     });
@@ -788,6 +818,27 @@
     db.ref("leagues/" + leagueId + "/matches/" + stage).push().set(data).catch(function(err){
       console.warn("Firebase: не удалось добавить матч:", err);
       window.alert("Не удалось добавить матч: " + (err && err.message ? err.message : err));
+    });
+  }
+
+  // One central match per round per stage: starring a match un-stars any
+  // other in the same round, in a single atomic multi-path update.
+  function toggleStar(card){
+    if(!db || !leagueId || !isAdmin() || isMatchStarted(card)) return;
+    var stage = card.dataset.stage;
+    var on = !isStarred(card);
+    var updates = {};
+    updates[card.dataset.matchId + "/star"] = on;
+    if(on){
+      panelFor(stage).querySelectorAll(".match-card").forEach(function(other){
+        if(other !== card && isStarred(other) && cardRound(other) === cardRound(card)){
+          updates[other.dataset.matchId + "/star"] = false;
+        }
+      });
+    }
+    db.ref("leagues/" + leagueId + "/matches/" + stage).update(updates).catch(function(err){
+      console.warn("Firebase: не удалось отметить центральный матч:", err);
+      window.alert("Не удалось отметить центральный матч: " + (err && err.message ? err.message : err));
     });
   }
 
@@ -1212,6 +1263,12 @@
       var panel = subtab.closest(".stage");
       panel.dataset.view = subtab.dataset.view;
       updateStageView(panel.dataset.stagePanel);
+      return;
+    }
+    var starBtn = e.target.closest(".match-star");
+    if(starBtn){
+      var starCard = starBtn.closest(".match-card");
+      if(starCard && !starBtn.disabled) toggleStar(starCard);
       return;
     }
     var rmBtn = e.target.closest(".match-remove");
