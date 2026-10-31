@@ -77,6 +77,7 @@
   // to go on, so for those this still only locks once a real score is
   // typed in.
   function isMatchStarted(card){
+    if(isBetsClosed(card)) return true;
     var aH = num(card.querySelector(".actual-home"));
     var aA = num(card.querySelector(".actual-away"));
     if(aH !== null && aA !== null) return true;
@@ -99,11 +100,27 @@
     return pts;
   }
 
+  // "-" in both actual-score fields means "ставки сделаны": predictions are
+  // frozen like after kickoff, and the match is settled at 0 points for all.
+  function isBetsClosed(card){
+    return card.querySelector(".actual-home").value.trim() === "-" &&
+           card.querySelector(".actual-away").value.trim() === "-";
+  }
+
+  // Actual-score fields take a number (0-99) or a single "-"; anything else
+  // typed is dropped. Dash look-alikes (– —) count as "-".
+  function sanitizeScore(value){
+    var v = String(value || "").replace(/[–—−]/g, "-");
+    if(v.indexOf("-") !== -1) return "-";
+    return v.replace(/\D/g, "").slice(0, 2);
+  }
+
   // The round's central ("starred") match counts double — for every point
   // source: the card badge, the leaderboard and the dynamics chart.
   function isStarred(card){ return card.dataset.star === "1"; }
   function pointsMultiplier(card){ return isStarred(card) ? 2 : 1; }
   function rowPoints(card, aH, aA, row){
+    if(isBetsClosed(card)) return 0;
     var pts = leaguePoints(aH, aA, num(row.querySelector(".pred-home")), num(row.querySelector(".pred-away")));
     return pts === null ? null : pts * pointsMultiplier(card);
   }
@@ -375,7 +392,7 @@
     });
     row.title = !mine
       ? "Прогноз редактирует только " + labelFor(row.dataset.player)
-      : (started ? "Матч начался — прогнозы больше нельзя менять" : "");
+      : (started ? (isBetsClosed(row.closest(".match-card")) ? "Ставки сделаны — прогнозы больше нельзя менять" : "Матч начался — прогнозы больше нельзя менять") : "");
   }
 
   function applyPermissionsToCard(card){
@@ -440,7 +457,7 @@
       var statusEl = card.querySelector("[data-status]");
       var played = isMatchStarted(card);
 
-      statusEl.textContent = played ? "Матч сыгран" : "Ожидается";
+      statusEl.textContent = isBetsClosed(card) ? "Ставки сделаны" : (played ? "Матч сыгран" : "Ожидается");
       statusEl.classList.toggle("is-final", !!played);
       statusEl.classList.toggle("badge-pending", !played);
       applyStarState(card, played);
@@ -523,7 +540,8 @@
     panelFor(stage).querySelectorAll(".match-card").forEach(function(card){
       var aH = num(card.querySelector(".actual-home"));
       var aA = num(card.querySelector(".actual-away"));
-      if(aH === null || aA === null) return;
+      // a "ставки сделаны" match is settled (0 for all), so its round counts
+      if(!isBetsClosed(card) && (aH === null || aA === null)) return;
       var r = cardRound(card);
       if(!byRound[r]){ byRound[r] = {}; members.forEach(function(u){ byRound[r][u] = 0; }); }
       card.querySelectorAll(".player-row").forEach(function(row){
@@ -1301,6 +1319,8 @@
     var matchId = card.dataset.matchId;
 
     if(input.matches(".actual-home, .actual-away")){
+      var clean = sanitizeScore(input.value);
+      if(clean !== input.value) input.value = clean;
       recompute();
       pushMatchField(stage, matchId, {
         aH: card.querySelector(".actual-home").value,

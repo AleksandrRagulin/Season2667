@@ -57,7 +57,7 @@
               },
               "players": {
                 "$player": {
-                  ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists() && (auth.token.email == $player + '@season2627.invalid' || root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email)"
+                  ".write": "auth != null && root.child('leagues').child($lid).child('members').child(auth.token.email.replace('@season2627.invalid', '')).exists() && (auth.token.email == $player + '@season2627.invalid' || root.child('leagues').child($lid).child('owner').val() + '@season2627.invalid' == auth.token.email) && !(root.child('leagues').child($lid).child('matches').child($stage).child($matchId).child('aH').val() == '-' && root.child('leagues').child($lid).child('matches').child($stage).child($matchId).child('aA').val() == '-')"
                 }
               }
             }

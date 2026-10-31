@@ -102,6 +102,9 @@ async function main() {
 
     for (const [matchId, m] of Object.entries(matches)) {
       if (!m || !m.fdId || m.fdDone) continue;
+      // "-" in both fields = "ставки сделаны", settled by hand at 0 points:
+      // never overwrite that with a real score.
+      if (m.aH === "-" && m.aA === "-") continue;
       const path = `${leagueId}/matches/${stage}/${matchId}`;
 
       const learnNames = !m.fdKickoff; // first time we see this fixture

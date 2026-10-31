@@ -145,6 +145,7 @@
         <div class="rules-row"><span>+ угадан точный счёт</span><span>+2</span></div>
         <div class="rules-row"><span><b>Максимум за матч</b></span><span><b>4</b></span></div>
         <div class="rules-row"><span>★ Центральный матч тура — все очки удваиваются</span><span>×2</span></div>
+        <div class="rules-row"><span>«-» в обоих полях счёта — ставки сделаны: прогнозы закрыты, у всех 0</span><span>0</span></div>
       </div>
     </details>
 
@@ -177,6 +178,7 @@
         <div class="rules-row"><span>+ угадан точный счёт</span><span>+2</span></div>
         <div class="rules-row"><span><b>Максимум за матч</b></span><span><b>4</b></span></div>
         <div class="rules-row"><span>★ Центральный матч тура — все очки удваиваются</span><span>×2</span></div>
+        <div class="rules-row"><span>«-» в обоих полях счёта — ставки сделаны: прогнозы закрыты, у всех 0</span><span>0</span></div>
       </div>
     </details>
 
@@ -217,9 +219,9 @@
         <div class="score-row">
           <span class="team-name team-name--edit team-home" contenteditable="true" data-placeholder="Команда 1" aria-label="Название команды 1"></span>
           <div class="score-inputs">
-            <input type="number" class="score-input actual-home" min="0" max="30" inputmode="numeric" aria-label="Голы команды 1">
+            <input type="text" class="score-input actual-home" maxlength="2" autocomplete="off" aria-label="Голы команды 1 (или «-», если ставки сделаны)">
             <span class="score-sep">:</span>
-            <input type="number" class="score-input actual-away" min="0" max="30" inputmode="numeric" aria-label="Голы команды 2">
+            <input type="text" class="score-input actual-away" maxlength="2" autocomplete="off" aria-label="Голы команды 2 (или «-», если ставки сделаны)">
           </div>
           <span class="team-name team-name--edit team-away" contenteditable="true" data-placeholder="Команда 2" aria-label="Название команды 2"></span>
         </div>
